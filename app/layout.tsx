@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AuthHeader } from "./AuthHeader";
 import { ConvexClientProvider } from "./ConvexClientProvider";
+import { StoreUserInDatabase } from "./StoreUserInDatabase";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -32,7 +33,10 @@ export default function RootLayout({
           className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         >
           <AuthHeader />
-          <ConvexClientProvider>{children}</ConvexClientProvider>
+          <ConvexClientProvider>
+            <StoreUserInDatabase />
+            {children}
+          </ConvexClientProvider>
         </body>
       </html>
     </ClerkProvider>
