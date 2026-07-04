@@ -1,3 +1,4 @@
+import type { UserIdentity } from "convex/server";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { getCurrentUser } from "./lib/auth";
@@ -11,14 +12,39 @@ const userValidator = v.object({
   imageUrl: v.optional(v.string()),
 });
 
+function profileFromIdentity(
+  identity: UserIdentity,
+  args: { name?: string; email?: string; imageUrl?: string },
+) {
+  const nameFromIdentity =
+    identity.name ??
+    (identity.givenName && identity.familyName
+      ? `${identity.givenName} ${identity.familyName}`
+      : identity.givenName) ??
+    identity.nickname ??
+    identity.preferredUsername;
+
+  return {
+    name: nameFromIdentity ?? args.name ?? "Anonymous",
+    email: identity.email ?? args.email,
+    imageUrl: identity.pictureUrl ?? args.imageUrl,
+  };
+}
+
 export const store = mutation({
-  args: {},
+  args: {
+    name: v.optional(v.string()),
+    email: v.optional(v.string()),
+    imageUrl: v.optional(v.string()),
+  },
   returns: v.id("users"),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
       throw new Error("Not authenticated");
     }
+
+    const profile = profileFromIdentity(identity, args);
 
     const user = await ctx.db
       .query("users")
@@ -28,20 +54,12 @@ export const store = mutation({
       .unique();
 
     if (user !== null) {
-      const name = identity.name ?? user.name;
-      const email = identity.email;
-      const imageUrl = identity.pictureUrl;
-
       if (
-        user.name !== name ||
-        user.email !== email ||
-        user.imageUrl !== imageUrl
+        user.name !== profile.name ||
+        user.email !== profile.email ||
+        user.imageUrl !== profile.imageUrl
       ) {
-        await ctx.db.patch("users", user._id, {
-          name,
-          email,
-          imageUrl,
-        });
+        await ctx.db.patch("users", user._id, profile);
       }
 
       return user._id;
@@ -49,9 +67,7 @@ export const store = mutation({
 
     return await ctx.db.insert("users", {
       tokenIdentifier: identity.tokenIdentifier,
-      name: identity.name ?? "Anonymous",
-      email: identity.email,
-      imageUrl: identity.pictureUrl,
+      ...profile,
     });
   },
 });
