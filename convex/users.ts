@@ -57,7 +57,7 @@ export const store = mutation({
       if (
         user.name !== profile.name ||
         user.email !== profile.email ||
-        user.imageUrl !== profile.imageUrl
+        user.profileImage !== profile.imageUrl
       ) {
         await ctx.db.patch("users", user._id, profile);
       }
@@ -66,6 +66,8 @@ export const store = mutation({
     }
 
     return await ctx.db.insert("users", {
+      userId: identity.subject,
+      createdAt: new Date().toISOString(),
       tokenIdentifier: identity.tokenIdentifier,
       ...profile,
     });
