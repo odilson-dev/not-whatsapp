@@ -9,13 +9,15 @@ export default function Home() {
           Welcome to Not Whatsapp
         </div>
 
-        <p>It&apos;s like WhatsApp, but it&apos;s not.</p>
+        <p className="text-xl md:text-2xl text-white/80">
+          It&apos;s like WhatsApp, but it&apos;s not.
+        </p>
 
         <Button
           size="lg"
-          className="bg-white text-[#00A884] hover:bg-gray-100 dark:bg-[#20bc33] dark:text-white dark:hover:bg-[#2a3942]"
+          className="bg-white rounded-sm text-[#00A884] hover:bg-gray-100 dark:bg-[#202c33] dark:text-white dark:hover:bg-[#2a3942]"
         >
-          <Link href="/chat" className="text-lg font-semibold">
+          <Link href="/chat" className="text-md font-semibold">
             Start Chatting
           </Link>
         </Button>

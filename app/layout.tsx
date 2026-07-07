@@ -1,8 +1,9 @@
+import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
 import { Roboto, Roboto_Mono } from "next/font/google";
+import { ConvexClientProvider } from "../components/providers/ConvexClientProvider";
 import { AuthHeader } from "./AuthHeader";
-import { ConvexClientProvider } from "./ConvexClientProvider";
 import { StoreUserInDatabase } from "./StoreUserInDatabase";
 import "./globals.css";
 
@@ -30,6 +31,7 @@ export default function RootLayout({
   return (
     <ClerkProvider afterSignOutUrl="/sign-in">
       <html
+        suppressHydrationWarning
         lang="en"
         className={`${roboto.variable} ${robotoMono.variable}`}
       >
@@ -37,7 +39,14 @@ export default function RootLayout({
           <AuthHeader />
           <ConvexClientProvider>
             <StoreUserInDatabase />
-            {children}
+            <ThemeProvider
+              attribute="class"
+              defaultTheme="dark"
+              enableSystem
+              disableTransitionOnChange
+            >
+              {children}
+            </ThemeProvider>
           </ConvexClientProvider>
         </body>
       </html>
