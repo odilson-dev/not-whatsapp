@@ -9,7 +9,7 @@ const userValidator = v.object({
   tokenIdentifier: v.string(),
   name: v.string(),
   email: v.optional(v.string()),
-  imageUrl: v.optional(v.string()),
+  profileImage: v.optional(v.string()),
 });
 
 function profileFromIdentity(
@@ -27,7 +27,7 @@ function profileFromIdentity(
   return {
     name: nameFromIdentity ?? args.name ?? "Anonymous",
     email: identity.email ?? args.email,
-    imageUrl: identity.pictureUrl ?? args.imageUrl,
+    profileImage: identity.pictureUrl ?? args.imageUrl,
   };
 }
 
@@ -57,7 +57,7 @@ export const store = mutation({
       if (
         user.name !== profile.name ||
         user.email !== profile.email ||
-        user.profileImage !== profile.imageUrl
+        user.profileImage !== profile.profileImage
       ) {
         await ctx.db.patch("users", user._id, profile);
       }
