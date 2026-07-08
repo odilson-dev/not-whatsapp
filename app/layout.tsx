@@ -36,9 +36,9 @@ export default function RootLayout({
         className={`${roboto.variable} ${robotoMono.variable}`}
       >
         <body className={`${roboto.className} antialiased`}>
-          <AuthHeader />
           <ConvexClientProvider>
             <StoreUserInDatabase />
+            <AuthHeader />
             <ThemeProvider
               attribute="class"
               defaultTheme="dark"
