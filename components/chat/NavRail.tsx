@@ -55,15 +55,22 @@ export function NavRail({
   currentUser,
   unreadChats,
   hasStatusUpdates,
+  className,
 }: {
   active: ChatSection;
   onChange: (section: ChatSection) => void;
   currentUser: { name: string; profileImage?: string };
   unreadChats?: number;
   hasStatusUpdates?: boolean;
+  className?: string;
 }) {
   return (
-    <nav className="flex w-16 shrink-0 flex-col items-center gap-1 border-r border-border bg-[var(--sidebar)] py-3">
+    <nav
+      className={cn(
+        "flex w-16 shrink-0 flex-col items-center gap-1 border-r border-border bg-[var(--sidebar)] py-3",
+        className,
+      )}
+    >
       <RailButton
         icon={MessageSquare}
         label="Chats"

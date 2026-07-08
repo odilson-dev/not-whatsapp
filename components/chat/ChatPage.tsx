@@ -1,7 +1,12 @@
 "use client";
 
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { Modal } from "@/components/admin/Modal";
 import { Fancybox } from "@/components/chat/Fancybox";
+import { MediaView } from "@/components/chat/MediaView";
+import { NavRail, type ChatSection } from "@/components/chat/NavRail";
+import { SettingsView } from "@/components/chat/SettingsView";
+import { StatusView } from "@/components/chat/StatusView";
 import { UserAvatar } from "@/components/chat/UserAvatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,14 +16,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import {
   formatConversationTime,
   formatLastSeen,
   formatMessageTime,
 } from "@/lib/format-time";
 import { cn } from "@/lib/utils";
-import { api } from "@/convex/_generated/api";
-import type { Id } from "@/convex/_generated/dataModel";
+import { useClerk } from "@clerk/nextjs";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import {
   Archive,
@@ -32,6 +38,7 @@ import {
   Crown,
   Download,
   Forward,
+  ListChecks,
   Loader2,
   LogOut,
   MessageSquare,
@@ -51,11 +58,6 @@ import {
   Users,
   X,
 } from "lucide-react";
-import Link from "next/link";
-import { NavRail, type ChatSection } from "@/components/chat/NavRail";
-import { StatusView } from "@/components/chat/StatusView";
-import { MediaView } from "@/components/chat/MediaView";
-import { SettingsView } from "@/components/chat/SettingsView";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 type PublicUser = {
@@ -153,8 +155,7 @@ function formatDaySeparator(timestamp: number): string {
     weekday: "long",
     day: "numeric",
     month: "long",
-    year:
-      date.getFullYear() === today.getFullYear() ? undefined : "numeric",
+    year: date.getFullYear() === today.getFullYear() ? undefined : "numeric",
   });
 }
 
@@ -220,12 +221,19 @@ export function ChatPage() {
   }, [heartbeat]);
 
   const now = useNow(30000);
+  const { signOut } = useClerk();
+  const removeConversation = useMutation(api.conversations.remove);
   const [activeSection, setActiveSection] = useState<ChatSection>("chats");
   const statusOverview = useQuery(api.status.listActive, { now });
   const hasStatusUpdates =
     statusOverview?.others.some((bucket) => bucket.hasUnviewed) ?? false;
   const [selectedConversationId, setSelectedConversationId] =
     useState<Id<"conversations"> | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<Id<"conversations">>>(
+    new Set(),
+  );
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [sidebarSearch, setSidebarSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterKey>("all");
   const [showArchived, setShowArchived] = useState(false);
@@ -237,7 +245,9 @@ export function ChatPage() {
 
   const searchResults = useQuery(
     api.users.search,
-    debouncedNewChatQuery.length > 0 ? { query: debouncedNewChatQuery } : "skip",
+    debouncedNewChatQuery.length > 0
+      ? { query: debouncedNewChatQuery }
+      : "skip",
   );
 
   useEffect(() => {
@@ -304,23 +314,61 @@ export function ChatPage() {
   const selectedConversation = conversations?.find(
     (conversation) => conversation._id === selectedConversationId,
   );
+  // Derive the actually-open conversation id from the list so a stale selection
+  // (e.g. a chat that was just deleted) is treated as "nothing open" without
+  // needing to reset state in an effect.
+  const openConversationId = selectedConversation?._id ?? null;
 
   const handleSelectConversation = (conversationId: Id<"conversations">) => {
     setSelectedConversationId(conversationId);
     void markRead({ conversationId });
   };
 
-  useEffect(() => {
-    if (
-      selectedConversationId &&
-      conversations &&
-      !conversations.some(
-        (conversation) => conversation._id === selectedConversationId,
-      )
-    ) {
+  const enterSelectionMode = () => {
+    setSelectionMode(true);
+    setSelectedIds(new Set());
+  };
+
+  const exitSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  };
+
+  const toggleSelected = (conversationId: Id<"conversations">) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(conversationId)) {
+        next.delete(conversationId);
+      } else {
+        next.add(conversationId);
+      }
+      return next;
+    });
+  };
+
+  const selectAllVisible = () => {
+    setSelectedIds(new Set(filteredConversations.map((c) => c._id)));
+  };
+
+  const markSelectedRead = async () => {
+    const ids = Array.from(selectedIds);
+    await Promise.all(
+      ids.map((conversationId) => markRead({ conversationId })),
+    );
+    exitSelectionMode();
+  };
+
+  const deleteSelected = async () => {
+    const ids = Array.from(selectedIds);
+    await Promise.all(
+      ids.map((conversationId) => removeConversation({ conversationId })),
+    );
+    if (selectedConversationId && selectedIds.has(selectedConversationId)) {
       setSelectedConversationId(null);
     }
-  }, [conversations, selectedConversationId]);
+    setConfirmBulkDelete(false);
+    exitSelectionMode();
+  };
 
   const startChatWithUser = async (otherUserId: Id<"users">) => {
     setIsStartingChat(true);
@@ -353,145 +401,217 @@ export function ChatPage() {
         currentUser={currentUser}
         unreadChats={counts.unread}
         hasStatusUpdates={hasStatusUpdates}
+        className={cn(
+          activeSection === "chats" &&
+            openConversationId &&
+            "hidden md:flex",
+        )}
       />
       {activeSection === "chats" && (
-      <aside
-        className={cn(
-          "flex w-full flex-col border-r border-border bg-[var(--background)] md:w-[420px] md:max-w-[40%]",
-          selectedConversationId && "hidden md:flex",
-        )}
-      >
-        <header className="flex items-center justify-between px-4 py-3">
-          <UserAvatar
-            name={currentUser.name}
-            imageUrl={currentUser.profileImage}
-            className="size-10"
-          />
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => setShowNewGroup(true)}
-              className="rounded-full p-2 text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
-              aria-label="New group"
-            >
-              <Users className="size-5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowNewChat(true)}
-              className="rounded-full p-2 text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
-              aria-label="New chat"
-            >
-              <MessageSquare className="size-5" />
-            </button>
-            <ThemeToggle
-              bare
-              className="rounded-full p-2 text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
-            />
-            <Link
-              href="/profile"
-              className="rounded-full p-2 text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
-              aria-label="Profile"
-            >
-              <MoreVertical className="size-5" />
-            </Link>
-          </div>
-        </header>
-
-        <div className="px-3 pb-2">
-          <label className="relative block">
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-foreground/40" />
-            <input
-              value={sidebarSearch}
-              onChange={(event) => setSidebarSearch(event.target.value)}
-              placeholder="Search"
-              className="w-full rounded-lg bg-[var(--card)] py-2 pr-3 pl-10 text-sm text-foreground outline-none placeholder:text-foreground/40 focus:ring-1 focus:ring-[#00A884]/50"
-            />
-          </label>
-        </div>
-
-        {!showArchived && (
-          <div className="flex flex-wrap gap-2 px-3 pb-2">
-            <FilterChip
-              label="All"
-              active={activeFilter === "all"}
-              onClick={() => setActiveFilter("all")}
-            />
-            <FilterChip
-              label="Unread"
-              count={counts.unread}
-              active={activeFilter === "unread"}
-              onClick={() => setActiveFilter("unread")}
-            />
-            <FilterChip
-              label="Favourites"
-              count={counts.favorites}
-              active={activeFilter === "favorites"}
-              onClick={() => setActiveFilter("favorites")}
-            />
-            <FilterChip
-              label="Groups"
-              count={counts.groups}
-              active={activeFilter === "groups"}
-              onClick={() => setActiveFilter("groups")}
-            />
-          </div>
-        )}
-
-        {showArchived && (
-          <button
-            type="button"
-            onClick={() => setShowArchived(false)}
-            className="flex items-center gap-3 border-b border-border px-4 py-3 text-sm text-foreground/80 transition-colors hover:bg-[var(--card)]"
-          >
-            <ArrowLeft className="size-4" />
-            <span className="font-medium">Archived</span>
-          </button>
-        )}
-
-        {!showArchived &&
-          archivedCount > 0 &&
-          activeFilter === "all" &&
-          sidebarSearch.trim() === "" && (
-            <button
-              type="button"
-              onClick={() => setShowArchived(true)}
-              className="flex w-full items-center gap-3 border-b border-border px-4 py-3 text-sm text-foreground/80 transition-colors hover:bg-[var(--card)]"
-            >
-              <Archive className="size-4 text-[#00A884]" />
-              <span className="font-medium">Archived</span>
-              <span className="ml-auto text-xs text-foreground/45">
-                {archivedCount}
+        <aside
+          className={cn(
+            "flex w-full flex-col border-r border-border bg-[var(--background)] md:w-[420px] md:max-w-[40%]",
+            openConversationId && "hidden md:flex",
+          )}
+        >
+          {selectionMode ? (
+            <header className="flex items-center gap-3 px-3 py-3">
+              <button
+                type="button"
+                onClick={exitSelectionMode}
+                className="rounded-full p-2 text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
+                aria-label="Cancel selection"
+              >
+                <X className="size-5" />
+              </button>
+              <span className="text-base font-medium">
+                {selectedIds.size > 0
+                  ? `${selectedIds.size} selected`
+                  : "Select chats"}
               </span>
+              <div className="ml-auto flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={selectAllVisible}
+                  className="rounded-full p-2 text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
+                  aria-label="Select all"
+                  title="Select all"
+                >
+                  <ListChecks className="size-5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void markSelectedRead()}
+                  disabled={selectedIds.size === 0}
+                  className="rounded-full p-2 text-foreground/80 transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+                  aria-label="Mark as read"
+                  title="Mark as read"
+                >
+                  <CheckCheck className="size-5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmBulkDelete(true)}
+                  disabled={selectedIds.size === 0}
+                  className="rounded-full p-2 text-destructive transition-colors hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-40"
+                  aria-label="Delete"
+                  title="Delete"
+                >
+                  <Trash2 className="size-5" />
+                </button>
+              </div>
+            </header>
+          ) : (
+            <header className="flex items-center justify-between px-4 py-3">
+              <h1 className="text-xl font-semibold tracking-tight">
+                Not Whatsapp
+              </h1>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setShowNewChat(true)}
+                  className="rounded-full p-2 text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
+                  aria-label="New chat"
+                >
+                  <MessageSquare className="size-5" />
+                </button>
+                <ThemeToggle
+                  bare
+                  className="rounded-full p-2 text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
+                />
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    aria-label="Menu"
+                    className="rounded-full p-2 text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
+                  >
+                    <MoreVertical className="size-5" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" side="bottom">
+                    <DropdownMenuItem onClick={() => setShowNewGroup(true)}>
+                      <Users />
+                      New group
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={enterSelectionMode}>
+                      <ListChecks />
+                      Select chats
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onClick={() => void signOut({ redirectUrl: "/" })}
+                    >
+                      <LogOut />
+                      Log out
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </header>
+          )}
+
+          <div className="px-3 pb-2">
+            <label className="relative block">
+              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-foreground/40" />
+              <input
+                value={sidebarSearch}
+                onChange={(event) => setSidebarSearch(event.target.value)}
+                placeholder="Search"
+                className="w-full rounded-lg bg-[var(--card)] py-2 pr-3 pl-10 text-sm text-foreground outline-none placeholder:text-foreground/40 focus:ring-1 focus:ring-[#00A884]/50"
+              />
+            </label>
+          </div>
+
+          {!showArchived && (
+            <div className="flex flex-wrap gap-2 px-3 pb-2">
+              <FilterChip
+                label="All"
+                active={activeFilter === "all"}
+                onClick={() => setActiveFilter("all")}
+              />
+              <FilterChip
+                label="Unread"
+                count={counts.unread}
+                active={activeFilter === "unread"}
+                onClick={() => setActiveFilter("unread")}
+              />
+              <FilterChip
+                label="Favorites"
+                count={counts.favorites}
+                active={activeFilter === "favorites"}
+                onClick={() => setActiveFilter("favorites")}
+              />
+              <FilterChip
+                label="Groups"
+                count={counts.groups}
+                active={activeFilter === "groups"}
+                onClick={() => setActiveFilter("groups")}
+              />
+            </div>
+          )}
+
+          {showArchived && (
+            <button
+              type="button"
+              onClick={() => setShowArchived(false)}
+              className="flex items-center gap-3 border-b border-border px-4 py-3 text-sm text-foreground/80 transition-colors hover:bg-[var(--card)]"
+            >
+              <ArrowLeft className="size-4" />
+              <span className="font-medium">Archived</span>
             </button>
           )}
 
-        <div className="flex-1 overflow-y-auto">
-          {filteredConversations.length === 0 ? (
-            <div className="px-6 py-10 text-center text-sm text-foreground/50">
-              {showArchived
-                ? "No archived chats."
-                : conversations.length === 0
-                  ? "No chats yet. Start a new conversation."
-                  : "No chats match this filter."}
-            </div>
-          ) : (
-            filteredConversations.map((conversation) => (
-              <ConversationListItem
-                key={conversation._id}
-                conversation={conversation}
-                isSelected={selectedConversationId === conversation._id}
-                isOnline={
-                  conversation.kind === "direct" &&
-                  conversation.otherLastSeen !== undefined &&
-                  now - conversation.otherLastSeen < ONLINE_THRESHOLD_MS
-                }
-                onSelect={() => handleSelectConversation(conversation._id)}
-              />
-            ))
-          )}
-        </div>
-      </aside>
+          {!showArchived &&
+            archivedCount > 0 &&
+            activeFilter === "all" &&
+            sidebarSearch.trim() === "" && (
+              <button
+                type="button"
+                onClick={() => setShowArchived(true)}
+                className="flex w-full items-center gap-3 border-b border-border px-4 py-3 text-sm text-foreground/80 transition-colors hover:bg-[var(--card)]"
+              >
+                <Archive className="size-4 text-[#00A884]" />
+                <span className="font-medium">Archived</span>
+                <span className="ml-auto text-xs text-foreground/45">
+                  {archivedCount}
+                </span>
+              </button>
+            )}
+
+          <div className="flex-1 overflow-y-auto">
+            {filteredConversations.length === 0 ? (
+              <div className="px-6 py-10 text-center text-sm text-foreground/50">
+                {showArchived
+                  ? "No archived chats."
+                  : conversations.length === 0
+                    ? "No chats yet. Start a new conversation."
+                    : "No chats match this filter."}
+              </div>
+            ) : (
+              filteredConversations.map((conversation) => (
+                <ConversationListItem
+                  key={conversation._id}
+                  conversation={conversation}
+                  isSelected={
+                    !selectionMode &&
+                    openConversationId === conversation._id
+                  }
+                  isOnline={
+                    conversation.kind === "direct" &&
+                    conversation.otherLastSeen !== undefined &&
+                    now - conversation.otherLastSeen < ONLINE_THRESHOLD_MS
+                  }
+                  selectionMode={selectionMode}
+                  checked={selectedIds.has(conversation._id)}
+                  onSelect={() =>
+                    selectionMode
+                      ? toggleSelected(conversation._id)
+                      : handleSelectConversation(conversation._id)
+                  }
+                />
+              ))
+            )}
+          </div>
+        </aside>
       )}
 
       {activeSection === "chats" && (
@@ -521,9 +641,7 @@ export function ChatPage() {
         </section>
       )}
 
-      {activeSection === "status" && (
-        <StatusView currentUser={currentUser} />
-      )}
+      {activeSection === "status" && <StatusView currentUser={currentUser} />}
 
       {activeSection === "media" && <MediaView />}
 
@@ -557,6 +675,29 @@ export function ChatPage() {
           }}
         />
       )}
+
+      {confirmBulkDelete && (
+        <Modal
+          open
+          onClose={() => setConfirmBulkDelete(false)}
+          title="Delete chats?"
+          description={`This will delete ${selectedIds.size} chat${
+            selectedIds.size > 1 ? "s" : ""
+          } from your list.`}
+        >
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setConfirmBulkDelete(false)}
+            >
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={() => void deleteSelected()}>
+              Delete
+            </Button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -585,7 +726,12 @@ function FilterChip({
     >
       {label}
       {count !== undefined && count > 0 && (
-        <span className={cn("ml-1", active ? "text-[#00A884]" : "text-foreground/40")}>
+        <span
+          className={cn(
+            "ml-1",
+            active ? "text-[#00A884]" : "text-foreground/40",
+          )}
+        >
           {count}
         </span>
       )}
@@ -598,11 +744,15 @@ function ConversationListItem({
   isSelected,
   isOnline,
   onSelect,
+  selectionMode = false,
+  checked = false,
 }: {
   conversation: ConversationPreview;
   isSelected: boolean;
   isOnline: boolean;
   onSelect: () => void;
+  selectionMode?: boolean;
+  checked?: boolean;
 }) {
   const isGroup = conversation.kind === "group";
   return (
@@ -619,8 +769,22 @@ function ConversationListItem({
       className={cn(
         "group/row flex w-full cursor-pointer items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-[var(--card)]",
         isSelected && "bg-[var(--muted)]",
+        selectionMode && checked && "bg-[var(--muted)]",
       )}
     >
+      {selectionMode && (
+        <span
+          aria-hidden
+          className={cn(
+            "flex size-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
+            checked
+              ? "border-[#00A884] bg-[#00A884] text-white"
+              : "border-foreground/30",
+          )}
+        >
+          {checked && <Check className="size-3.5" />}
+        </span>
+      )}
       <UserAvatar
         name={conversation.title}
         imageUrl={conversation.avatarUrl}
@@ -658,7 +822,9 @@ function ConversationListItem({
             )}
           >
             {conversation.lastMessagePreview ??
-              (isGroup ? `${conversation.memberCount} members` : "No messages yet")}
+              (isGroup
+                ? `${conversation.memberCount} members`
+                : "No messages yet")}
           </p>
           <span className="ml-auto flex shrink-0 items-center gap-1.5 pl-1">
             {conversation.isBlocked && (
@@ -677,14 +843,16 @@ function ConversationListItem({
         </div>
       </div>
 
-      <div className="shrink-0 opacity-0 transition-opacity focus-within:opacity-100 group-hover/row:opacity-100">
-        <ConversationActionsMenu
-          conversation={conversation}
-          align="start"
-          side="bottom"
-          triggerClassName="rounded-full p-1.5 text-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
-        />
-      </div>
+      {!selectionMode && (
+        <div className="shrink-0 opacity-0 transition-opacity focus-within:opacity-100 group-hover/row:opacity-100">
+          <ConversationActionsMenu
+            conversation={conversation}
+            align="start"
+            side="bottom"
+            triggerClassName="rounded-full p-1.5 text-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -763,8 +931,8 @@ function ConversationActionsMenu({
         >
           {conversation.isFavorite ? <StarOff /> : <Star />}
           {conversation.isFavorite
-            ? "Remove from favourites"
-            : "Add to favourites"}
+            ? "Remove from favorites"
+            : "Add to favorites"}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         {!isGroup && conversation.otherUser && (
@@ -814,7 +982,9 @@ function EmptyChatState() {
       <div className="mb-6 rounded-full bg-[var(--card)] p-8">
         <MessageSquare className="size-16 text-foreground/20" />
       </div>
-      <h2 className="text-2xl font-light text-foreground/90">Not Whatsapp Web</h2>
+      <h2 className="text-2xl font-light text-foreground/90">
+        Not Whatsapp Web
+      </h2>
       <p className="mt-3 max-w-sm text-sm text-foreground/50">
         Select a chat from the sidebar to start messaging.
       </p>
@@ -875,7 +1045,9 @@ function NewChatDialog({
               <Loader2 className="size-6 animate-spin text-[#00A884]" />
             </div>
           ) : results.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-foreground/50">No users found.</p>
+            <p className="px-4 py-6 text-sm text-foreground/50">
+              No users found.
+            </p>
           ) : (
             results.map((user) => (
               <button
@@ -1030,7 +1202,9 @@ function NewGroupDialog({
               <Loader2 className="size-6 animate-spin text-[#00A884]" />
             </div>
           ) : results.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-foreground/50">No users found.</p>
+            <p className="px-4 py-6 text-sm text-foreground/50">
+              No users found.
+            </p>
           ) : (
             results.map((user) => {
               const isSelected = selected.some((u) => u._id === user._id);
@@ -1222,9 +1396,7 @@ function MessagePanel({
       .slice(0, 6);
   }, [mentionQuery, mentionCandidates]);
 
-  const handleDraftChange = (
-    event: React.ChangeEvent<HTMLTextAreaElement>,
-  ) => {
+  const handleDraftChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = event.target.value;
     setDraft(value);
     if (!isGroup) {
@@ -1386,251 +1558,261 @@ function MessagePanel({
             showContactInfo && "hidden md:flex",
           )}
         >
-        <header className="flex items-center gap-3 border-b border-border bg-[var(--card)] px-4 py-3">
-          {onBack && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className="text-foreground hover:bg-accent"
-              onClick={onBack}
-            >
-              ←
-            </Button>
-          )}
-          <button
-            type="button"
-            onClick={() => setShowContactInfo((value) => !value)}
-            className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left transition-colors hover:opacity-90"
-            aria-label="View contact info"
-          >
-            <UserAvatar
-              name={conversation.title}
-              imageUrl={conversation.avatarUrl}
-              className="size-10"
-              group={isGroup}
-              online={isGroup ? undefined : presence === "online"}
-              statusClassName="border-[var(--card)]"
-            />
-            <div className="min-w-0 flex-1">
-              <p className="truncate font-medium">{conversation.title}</p>
-              {isGroup ? (
-                <p className="truncate text-xs text-foreground/50">{groupSubtitle}</p>
-              ) : presence ? (
-                <p
-                  className={cn(
-                    "truncate text-xs",
-                    presence === "online" ? "text-[#00A884]" : "text-foreground/50",
-                  )}
-                >
-                  {presence}
-                </p>
-              ) : (
-                otherUser?.email && (
-                  <p className="truncate text-xs text-foreground/50">
-                    {otherUser.email}
-                  </p>
-                )
-              )}
-            </div>
-          </button>
-          <ConversationActionsMenu
-            conversation={conversation}
-            align="end"
-            side="bottom"
-            triggerClassName="rounded-full p-2 text-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
-            onDeleted={onDeleted}
-          />
-        </header>
-
-        <div
-          className="flex-1 overflow-y-auto px-4 py-4"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.03) 1px, transparent 0)",
-            backgroundSize: "24px 24px",
-          }}
-        >
-          {status === "CanLoadMore" && (
-            <div className="mb-4 flex justify-center">
+          <header className="flex items-center gap-3 border-b border-border bg-[var(--card)] px-4 py-3">
+            {onBack && (
               <Button
-                variant="outline"
-                size="sm"
-                className="border-border bg-transparent text-foreground hover:bg-accent"
-                onClick={() => loadMore(30)}
+                variant="ghost"
+                size="icon-sm"
+                className="text-foreground hover:bg-accent"
+                onClick={onBack}
               >
-                Load older messages
+                ←
               </Button>
-            </div>
-          )}
-
-          <div className="space-y-2">
-            {messages.map((message, index) => {
-              const previous = index > 0 ? messages[index - 1] : undefined;
-              const showDaySeparator =
-                previous === undefined ||
-                new Date(previous.createdAt).toDateString() !==
-                  new Date(message.createdAt).toDateString();
-
-              return (
-                <div key={message._id} className="space-y-2">
-                  {showDaySeparator && (
-                    <DaySeparator label={formatDaySeparator(message.createdAt)} />
-                  )}
-                  {message.type === "system" ? (
-                    <SystemMessage text={message.text ?? ""} />
-                  ) : (
-                    <MessageRow
-                      message={message}
-                      isOwn={message.senderId === currentUserId}
-                      isGroup={isGroup}
-                      canDelete={
-                        message.senderId === currentUserId ||
-                        (isGroup && iAmAdmin)
-                      }
-                      receipt={receiptFor(message)}
-                      replyLabel={replyLabel(message)}
-                      galleryId={`chat-${conversationId}`}
-                      mentionNames={(message.mentions ?? [])
-                        .map((id) => memberNameById.get(id))
-                        .filter((name): name is string => name !== undefined)}
-                      onReply={handleReply}
-                      onForward={(msg) => setForwardMessage(msg)}
-                      onDownload={(msg) => void handleDownload(msg)}
-                      onDelete={(msg) => void handleDelete(msg)}
-                    />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          <div ref={bottomRef} />
-        </div>
-
-        {isBlocked && otherUser ? (
-          <BlockedComposer otherUserId={otherUser._id} />
-        ) : (
-          <footer className="border-t border-border bg-[var(--card)] px-4 py-3">
-            {replyTarget && (
-              <div className="mb-2 flex items-center gap-2 rounded-lg bg-[var(--background)] px-3 py-2">
-                <div className="min-w-0 flex-1 border-l-2 border-[#00A884] pl-2">
-                  <p className="text-xs font-medium text-[#00A884]">
-                    {replyLabel(replyTarget)}
+            )}
+            <button
+              type="button"
+              onClick={() => setShowContactInfo((value) => !value)}
+              className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left transition-colors hover:opacity-90"
+              aria-label="View contact info"
+            >
+              <UserAvatar
+                name={conversation.title}
+                imageUrl={conversation.avatarUrl}
+                className="size-10"
+                group={isGroup}
+                online={isGroup ? undefined : presence === "online"}
+                statusClassName="border-[var(--card)]"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-medium">{conversation.title}</p>
+                {isGroup ? (
+                  <p className="truncate text-xs text-foreground/50">
+                    {groupSubtitle}
                   </p>
-                  <p className="truncate text-sm text-foreground/60">
-                    {replyTarget.type === "image"
-                      ? "Photo"
-                      : (replyTarget.text ?? "")}
+                ) : presence ? (
+                  <p
+                    className={cn(
+                      "truncate text-xs",
+                      presence === "online"
+                        ? "text-[#00A884]"
+                        : "text-foreground/50",
+                    )}
+                  >
+                    {presence}
                   </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setReplyTarget(null)}
-                  className="rounded-full p-1 text-foreground/60 hover:bg-accent hover:text-foreground"
-                  aria-label="Cancel reply"
+                ) : (
+                  otherUser?.email && (
+                    <p className="truncate text-xs text-foreground/50">
+                      {otherUser.email}
+                    </p>
+                  )
+                )}
+              </div>
+            </button>
+            <ConversationActionsMenu
+              conversation={conversation}
+              align="end"
+              side="bottom"
+              triggerClassName="rounded-full p-2 text-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
+              onDeleted={onDeleted}
+            />
+          </header>
+
+          <div
+            className="flex-1 overflow-y-auto px-4 py-4"
+            style={{
+              backgroundImage:
+                "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.03) 1px, transparent 0)",
+              backgroundSize: "24px 24px",
+            }}
+          >
+            {status === "CanLoadMore" && (
+              <div className="mb-4 flex justify-center">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-border bg-transparent text-foreground hover:bg-accent"
+                  onClick={() => loadMore(30)}
                 >
-                  <X className="size-4" />
-                </button>
+                  Load older messages
+                </Button>
               </div>
             )}
-            <div className="relative flex items-end gap-2">
-              {isGroup && mentionQuery !== null && mentionMatches.length > 0 && (
-                <div className="absolute bottom-full left-10 mb-2 max-h-56 w-64 overflow-y-auto rounded-lg bg-[var(--card)] py-1 shadow-2xl ring-1 ring-border">
-                  {mentionMatches.map((member) => (
-                    <button
-                      key={member._id}
-                      type="button"
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => insertMention(member)}
-                      className="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-accent"
-                    >
-                      <UserAvatar
-                        name={member.name}
-                        imageUrl={member.profileImage}
-                        className="size-8"
+
+            <div className="space-y-2">
+              {messages.map((message, index) => {
+                const previous = index > 0 ? messages[index - 1] : undefined;
+                const showDaySeparator =
+                  previous === undefined ||
+                  new Date(previous.createdAt).toDateString() !==
+                    new Date(message.createdAt).toDateString();
+
+                return (
+                  <div key={message._id} className="space-y-2">
+                    {showDaySeparator && (
+                      <DaySeparator
+                        label={formatDaySeparator(message.createdAt)}
                       />
-                      <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-                        {member.name}
-                      </span>
-                      {member.role === "admin" && (
-                        <ShieldCheck className="size-3.5 shrink-0 text-[#00A884]" />
-                      )}
-                    </button>
-                  ))}
+                    )}
+                    {message.type === "system" ? (
+                      <SystemMessage text={message.text ?? ""} />
+                    ) : (
+                      <MessageRow
+                        message={message}
+                        isOwn={message.senderId === currentUserId}
+                        isGroup={isGroup}
+                        canDelete={
+                          message.senderId === currentUserId ||
+                          (isGroup && iAmAdmin)
+                        }
+                        receipt={receiptFor(message)}
+                        replyLabel={replyLabel(message)}
+                        galleryId={`chat-${conversationId}`}
+                        mentionNames={(message.mentions ?? [])
+                          .map((id) => memberNameById.get(id))
+                          .filter((name): name is string => name !== undefined)}
+                        onReply={handleReply}
+                        onForward={(msg) => setForwardMessage(msg)}
+                        onDownload={(msg) => void handleDownload(msg)}
+                        onDelete={(msg) => void handleDelete(msg)}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <div ref={bottomRef} />
+          </div>
+
+          {isBlocked && otherUser ? (
+            <BlockedComposer otherUserId={otherUser._id} />
+          ) : (
+            <footer className="border-t border-border bg-[var(--card)] px-4 py-3">
+              {replyTarget && (
+                <div className="mb-2 flex items-center gap-2 rounded-lg bg-[var(--background)] px-3 py-2">
+                  <div className="min-w-0 flex-1 border-l-2 border-[#00A884] pl-2">
+                    <p className="text-xs font-medium text-[#00A884]">
+                      {replyLabel(replyTarget)}
+                    </p>
+                    <p className="truncate text-sm text-foreground/60">
+                      {replyTarget.type === "image"
+                        ? "Photo"
+                        : (replyTarget.text ?? "")}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setReplyTarget(null)}
+                    className="rounded-full p-1 text-foreground/60 hover:bg-accent hover:text-foreground"
+                    aria-label="Cancel reply"
+                  >
+                    <X className="size-4" />
+                  </button>
                 </div>
               )}
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isUploadingImage || isSending}
-                className="rounded-full p-2 text-foreground/70 transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
-                aria-label="Attach image"
-              >
-                {isUploadingImage ? (
-                  <Loader2 className="size-5 animate-spin" />
-                ) : (
-                  <Camera className="size-5" />
-                )}
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(event) => void handleImageUpload(event)}
-              />
-              <textarea
-                ref={composerRef}
-                value={draft}
-                onChange={handleDraftChange}
-                onBlur={() => setMentionQuery(null)}
-                placeholder="Type a message"
-                rows={1}
-                className="max-h-32 min-h-10 flex-1 resize-none rounded-lg bg-[var(--muted)] px-4 py-2.5 text-sm text-foreground outline-none placeholder:text-foreground/40 focus:ring-1 focus:ring-[#00A884]/40"
-                onKeyDown={(event) => {
-                  if (event.key === "Escape" && mentionQuery !== null) {
-                    setMentionQuery(null);
-                    return;
-                  }
-                  if (event.key === "Enter" && !event.shiftKey) {
-                    if (mentionQuery !== null && mentionMatches.length > 0) {
-                      event.preventDefault();
-                      insertMention(mentionMatches[0]);
+              <div className="relative flex items-end gap-2">
+                {isGroup &&
+                  mentionQuery !== null &&
+                  mentionMatches.length > 0 && (
+                    <div className="absolute bottom-full left-10 mb-2 max-h-56 w-64 overflow-y-auto rounded-lg bg-[var(--card)] py-1 shadow-2xl ring-1 ring-border">
+                      {mentionMatches.map((member) => (
+                        <button
+                          key={member._id}
+                          type="button"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => insertMention(member)}
+                          className="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-accent"
+                        >
+                          <UserAvatar
+                            name={member.name}
+                            imageUrl={member.profileImage}
+                            className="size-8"
+                          />
+                          <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                            {member.name}
+                          </span>
+                          {member.role === "admin" && (
+                            <ShieldCheck className="size-3.5 shrink-0 text-[#00A884]" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploadingImage || isSending}
+                  className="rounded-full p-2 text-foreground/70 transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+                  aria-label="Attach image"
+                >
+                  {isUploadingImage ? (
+                    <Loader2 className="size-5 animate-spin" />
+                  ) : (
+                    <Camera className="size-5" />
+                  )}
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(event) => void handleImageUpload(event)}
+                />
+                <textarea
+                  ref={composerRef}
+                  value={draft}
+                  onChange={handleDraftChange}
+                  onBlur={() => setMentionQuery(null)}
+                  placeholder="Type a message"
+                  rows={1}
+                  className="max-h-32 min-h-10 flex-1 resize-none rounded-lg bg-[var(--muted)] px-4 py-2.5 text-sm text-foreground outline-none placeholder:text-foreground/40 focus:ring-1 focus:ring-[#00A884]/40"
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape" && mentionQuery !== null) {
+                      setMentionQuery(null);
                       return;
                     }
-                    event.preventDefault();
-                    void handleSend();
-                  }
-                }}
-              />
-              <Button
-                className="bg-[#00A884] text-white hover:bg-[#06cf9c]"
-                onClick={() => void handleSend()}
-                disabled={isSending || draft.trim().length === 0}
-              >
-                Send
-              </Button>
-            </div>
-            {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
-          </footer>
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      if (mentionQuery !== null && mentionMatches.length > 0) {
+                        event.preventDefault();
+                        insertMention(mentionMatches[0]);
+                        return;
+                      }
+                      event.preventDefault();
+                      void handleSend();
+                    }
+                  }}
+                />
+                <Button
+                  className="bg-[#00A884] text-white hover:bg-[#06cf9c]"
+                  onClick={() => void handleSend()}
+                  disabled={isSending || draft.trim().length === 0}
+                >
+                  Send
+                </Button>
+              </div>
+              {error && (
+                <p className="mt-2 text-sm text-destructive">{error}</p>
+              )}
+            </footer>
+          )}
+        </div>
+
+        {showContactInfo && (
+          <ContactInfoPanel
+            conversation={conversation}
+            presence={presence}
+            currentUserId={currentUserId}
+            onClose={() => setShowContactInfo(false)}
+          />
         )}
-      </div>
 
-      {showContactInfo && (
-        <ContactInfoPanel
-          conversation={conversation}
-          presence={presence}
-          currentUserId={currentUserId}
-          onClose={() => setShowContactInfo(false)}
-        />
-      )}
-
-      {forwardMessage && (
-        <ForwardDialog
-          message={forwardMessage}
-          currentConversationId={conversationId}
-          onClose={() => setForwardMessage(null)}
-        />
-      )}
+        {forwardMessage && (
+          <ForwardDialog
+            message={forwardMessage}
+            currentConversationId={conversationId}
+            onClose={() => setForwardMessage(null)}
+          />
+        )}
       </div>
     </Fancybox>
   );
@@ -1883,7 +2065,9 @@ function ForwardDialog({
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-4 pt-16">
       <div className="w-full max-w-md overflow-hidden rounded-xl bg-[var(--background)] shadow-2xl ring-1 ring-border">
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <h2 className="text-lg font-medium text-foreground">Forward message to</h2>
+          <h2 className="text-lg font-medium text-foreground">
+            Forward message to
+          </h2>
           <button
             type="button"
             onClick={onClose}
@@ -1913,7 +2097,9 @@ function ForwardDialog({
               <Loader2 className="size-6 animate-spin text-[#00A884]" />
             </div>
           ) : targets.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-foreground/50">No chats found.</p>
+            <p className="px-4 py-6 text-sm text-foreground/50">
+              No chats found.
+            </p>
           ) : (
             targets.map((conversation) => (
               <button
@@ -2146,7 +2332,9 @@ function ContactInfoPanel({
                 <p
                   className={cn(
                     "text-sm",
-                    presence === "online" ? "text-[#00A884]" : "text-foreground/50",
+                    presence === "online"
+                      ? "text-[#00A884]"
+                      : "text-foreground/50",
                   )}
                 >
                   {presence}
@@ -2234,11 +2422,7 @@ function ContactInfoPanel({
                                 )
                               }
                             >
-                              {member.role === "admin" ? (
-                                <Shield />
-                              ) : (
-                                <Crown />
-                              )}
+                              {member.role === "admin" ? <Shield /> : <Crown />}
                               {member.role === "admin"
                                 ? "Dismiss as admin"
                                 : "Make admin"}
@@ -2427,7 +2611,9 @@ function AddMembersDialog({
               <Loader2 className="size-6 animate-spin text-[#00A884]" />
             </div>
           ) : results.filter((u) => !existing.has(u._id)).length === 0 ? (
-            <p className="px-4 py-6 text-sm text-foreground/50">No users found.</p>
+            <p className="px-4 py-6 text-sm text-foreground/50">
+              No users found.
+            </p>
           ) : (
             results
               .filter((u) => !existing.has(u._id))
@@ -2470,7 +2656,9 @@ function AddMembersDialog({
         </div>
 
         <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-3">
-          <p className="text-sm text-foreground/40">{selected.length} selected</p>
+          <p className="text-sm text-foreground/40">
+            {selected.length} selected
+          </p>
           <Button
             className="bg-[#00A884] text-white hover:bg-[#06cf9c]"
             onClick={() => void handleAdd()}
