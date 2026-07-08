@@ -52,6 +52,10 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
+import { NavRail, type ChatSection } from "@/components/chat/NavRail";
+import { StatusView } from "@/components/chat/StatusView";
+import { MediaView } from "@/components/chat/MediaView";
+import { SettingsView } from "@/components/chat/SettingsView";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 type PublicUser = {
@@ -216,6 +220,10 @@ export function ChatPage() {
   }, [heartbeat]);
 
   const now = useNow(30000);
+  const [activeSection, setActiveSection] = useState<ChatSection>("chats");
+  const statusOverview = useQuery(api.status.listActive, { now });
+  const hasStatusUpdates =
+    statusOverview?.others.some((bucket) => bucket.hasUnviewed) ?? false;
   const [selectedConversationId, setSelectedConversationId] =
     useState<Id<"conversations"> | null>(null);
   const [sidebarSearch, setSidebarSearch] = useState("");
@@ -339,6 +347,14 @@ export function ChatPage() {
 
   return (
     <div className="flex h-screen bg-[var(--background)] text-foreground">
+      <NavRail
+        active={activeSection}
+        onChange={setActiveSection}
+        currentUser={currentUser}
+        unreadChats={counts.unread}
+        hasStatusUpdates={hasStatusUpdates}
+      />
+      {activeSection === "chats" && (
       <aside
         className={cn(
           "flex w-full flex-col border-r border-border bg-[var(--background)] md:w-[420px] md:max-w-[40%]",
@@ -476,21 +492,24 @@ export function ChatPage() {
           )}
         </div>
       </aside>
+      )}
 
-      <section className="hidden min-w-0 flex-1 md:flex">
-        {selectedConversation ? (
-          <MessagePanel
-            key={selectedConversation._id}
-            conversation={selectedConversation}
-            currentUserId={currentUser._id}
-            onDeleted={() => setSelectedConversationId(null)}
-          />
-        ) : (
-          <EmptyChatState />
-        )}
-      </section>
+      {activeSection === "chats" && (
+        <section className="hidden min-w-0 flex-1 md:flex">
+          {selectedConversation ? (
+            <MessagePanel
+              key={selectedConversation._id}
+              conversation={selectedConversation}
+              currentUserId={currentUser._id}
+              onDeleted={() => setSelectedConversationId(null)}
+            />
+          ) : (
+            <EmptyChatState />
+          )}
+        </section>
+      )}
 
-      {selectedConversation && (
+      {activeSection === "chats" && selectedConversation && (
         <section className="flex min-w-0 flex-1 md:hidden">
           <MessagePanel
             key={selectedConversation._id}
@@ -500,6 +519,16 @@ export function ChatPage() {
             onDeleted={() => setSelectedConversationId(null)}
           />
         </section>
+      )}
+
+      {activeSection === "status" && (
+        <StatusView currentUser={currentUser} />
+      )}
+
+      {activeSection === "media" && <MediaView />}
+
+      {activeSection === "settings" && (
+        <SettingsView currentUser={currentUser} />
       )}
 
       {showNewChat && (

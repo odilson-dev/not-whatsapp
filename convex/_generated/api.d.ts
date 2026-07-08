@@ -17,8 +17,10 @@ import type * as lib_conversationStates from "../lib/conversationStates.js";
 import type * as lib_conversations from "../lib/conversations.js";
 import type * as lib_members from "../lib/members.js";
 import type * as lib_systemMessages from "../lib/systemMessages.js";
+import type * as media from "../media.js";
 import type * as messages from "../messages.js";
 import type * as migrations from "../migrations.js";
+import type * as status from "../status.js";
 import type * as users from "../users.js";
 
 import type {
@@ -37,8 +39,10 @@ declare const fullApi: ApiFromModules<{
   "lib/conversations": typeof lib_conversations;
   "lib/members": typeof lib_members;
   "lib/systemMessages": typeof lib_systemMessages;
+  media: typeof media;
   messages: typeof messages;
   migrations: typeof migrations;
+  status: typeof status;
   users: typeof users;
 }>;
 

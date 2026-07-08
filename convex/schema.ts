@@ -113,4 +113,28 @@ export default defineSchema({
     .index("by_blocker_and_blocked", ["blockerId", "blockedId"])
     .index("by_blocker", ["blockerId"])
     .index("by_blocked", ["blockedId"]),
+
+  // Ephemeral "status" updates (WhatsApp-style). Each row expires 24h after
+  // it is created; expired rows are simply filtered out of queries.
+  statuses: defineTable({
+    userId: v.id("users"),
+    type: v.union(v.literal("text"), v.literal("image")),
+    text: v.optional(v.string()),
+    imageUrl: v.optional(v.string()),
+    // Background color for text statuses (hex string).
+    backgroundColor: v.optional(v.string()),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_expiresAt", ["expiresAt"]),
+
+  // Tracks which statuses a viewer has seen (for the seen/unseen ring).
+  statusViews: defineTable({
+    statusId: v.id("statuses"),
+    viewerId: v.id("users"),
+    viewedAt: v.number(),
+  })
+    .index("by_status_and_viewer", ["statusId", "viewerId"])
+    .index("by_viewer", ["viewerId"]),
 });
