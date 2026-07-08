@@ -6,6 +6,8 @@ import { getCurrentUser } from "./lib/auth";
 const userValidator = v.object({
   _id: v.id("users"),
   _creationTime: v.number(),
+  userId: v.string(),
+  createdAt: v.string(),
   tokenIdentifier: v.string(),
   name: v.string(),
   email: v.optional(v.string()),
@@ -54,12 +56,16 @@ export const store = mutation({
       .unique();
 
     if (user !== null) {
-      if (
-        user.name !== profile.name ||
-        user.email !== profile.email ||
-        user.profileImage !== profile.profileImage
-      ) {
-        await ctx.db.patch("users", user._id, profile);
+      const updates: {
+        email?: string;
+      } = {};
+
+      if (profile.email && user.email !== profile.email) {
+        updates.email = profile.email;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await ctx.db.patch("users", user._id, updates);
       }
 
       return user._id;
@@ -97,5 +103,52 @@ export const me = query({
   returns: userValidator,
   handler: async (ctx) => {
     return await getCurrentUser(ctx);
+  },
+});
+
+export const generateUploadUrl = mutation({
+  args: {},
+  returns: v.string(),
+  handler: async (ctx) => {
+    await getCurrentUser(ctx);
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+export const updateProfile = mutation({
+  args: {
+    name: v.optional(v.string()),
+    profileImageStorageId: v.optional(v.id("_storage")),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    const updates: {
+      name?: string;
+      profileImage?: string;
+    } = {};
+
+    if (args.name !== undefined) {
+      const trimmedName = args.name.trim();
+      if (trimmedName.length === 0) {
+        throw new Error("Name cannot be empty");
+      }
+      updates.name = trimmedName;
+    }
+
+    if (args.profileImageStorageId !== undefined) {
+      const profileImage = await ctx.storage.getUrl(args.profileImageStorageId);
+      if (!profileImage) {
+        throw new Error("Uploaded image not found");
+      }
+      updates.profileImage = profileImage;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return null;
+    }
+
+    await ctx.db.patch("users", user._id, updates);
+    return null;
   },
 });
