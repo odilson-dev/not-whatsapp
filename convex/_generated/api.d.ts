@@ -14,6 +14,7 @@ import type * as lib_blocks from "../lib/blocks.js";
 import type * as lib_conversationStates from "../lib/conversationStates.js";
 import type * as lib_conversations from "../lib/conversations.js";
 import type * as lib_members from "../lib/members.js";
+import type * as lib_systemMessages from "../lib/systemMessages.js";
 import type * as messages from "../messages.js";
 import type * as migrations from "../migrations.js";
 import type * as users from "../users.js";
@@ -31,6 +32,7 @@ declare const fullApi: ApiFromModules<{
   "lib/conversationStates": typeof lib_conversationStates;
   "lib/conversations": typeof lib_conversations;
   "lib/members": typeof lib_members;
+  "lib/systemMessages": typeof lib_systemMessages;
   messages: typeof messages;
   migrations: typeof migrations;
   users: typeof users;

@@ -1,5 +1,6 @@
 "use client";
 
+import { Fancybox } from "@/components/chat/Fancybox";
 import { UserAvatar } from "@/components/chat/UserAvatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -110,7 +111,7 @@ type ChatMessage = {
   _creationTime: number;
   conversationId: Id<"conversations">;
   senderId: Id<"users">;
-  type: "text" | "image";
+  type: "text" | "image" | "system";
   text?: string;
   imageUrl?: string;
   createdAt: number;
@@ -119,12 +120,38 @@ type ChatMessage = {
   replyTo?: {
     messageId: Id<"messages">;
     senderId: Id<"users">;
-    type: "text" | "image";
+    type: "text" | "image" | "system";
     text?: string;
   };
   senderName?: string;
   senderImage?: string;
 };
+
+function formatDaySeparator(timestamp: number): string {
+  const date = new Date(timestamp);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+
+  const sameDay = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate();
+
+  if (sameDay(date, today)) {
+    return "Today";
+  }
+  if (sameDay(date, yesterday)) {
+    return "Yesterday";
+  }
+  return date.toLocaleDateString(undefined, {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year:
+      date.getFullYear() === today.getFullYear() ? undefined : "numeric",
+  });
+}
 
 const MENTION_QUERY_REGEX = /(?:^|\s)@([^\s@]*)$/;
 
@@ -1317,13 +1344,14 @@ function MessagePanel({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-1">
-      <div
-        className={cn(
-          "flex h-full min-h-0 flex-1 flex-col bg-[#0b141a]",
-          showContactInfo && "hidden md:flex",
-        )}
-      >
+    <Fancybox>
+      <div className="flex h-full min-h-0 flex-1">
+        <div
+          className={cn(
+            "flex h-full min-h-0 flex-1 flex-col bg-[#0b141a]",
+            showContactInfo && "hidden md:flex",
+          )}
+        >
         <header className="flex items-center gap-3 border-b border-white/10 bg-[#202c33] px-4 py-3">
           {onBack && (
             <Button
@@ -1402,26 +1430,44 @@ function MessagePanel({
           )}
 
           <div className="space-y-2">
-            {messages.map((message) => (
-              <MessageRow
-                key={message._id}
-                message={message}
-                isOwn={message.senderId === currentUserId}
-                isGroup={isGroup}
-                canDelete={
-                  message.senderId === currentUserId || (isGroup && iAmAdmin)
-                }
-                receipt={receiptFor(message)}
-                replyLabel={replyLabel(message)}
-                mentionNames={(message.mentions ?? [])
-                  .map((id) => memberNameById.get(id))
-                  .filter((name): name is string => name !== undefined)}
-                onReply={handleReply}
-                onForward={(msg) => setForwardMessage(msg)}
-                onDownload={(msg) => void handleDownload(msg)}
-                onDelete={(msg) => void handleDelete(msg)}
-              />
-            ))}
+            {messages.map((message, index) => {
+              const previous = index > 0 ? messages[index - 1] : undefined;
+              const showDaySeparator =
+                previous === undefined ||
+                new Date(previous.createdAt).toDateString() !==
+                  new Date(message.createdAt).toDateString();
+
+              return (
+                <div key={message._id} className="space-y-2">
+                  {showDaySeparator && (
+                    <DaySeparator label={formatDaySeparator(message.createdAt)} />
+                  )}
+                  {message.type === "system" ? (
+                    <SystemMessage text={message.text ?? ""} />
+                  ) : (
+                    <MessageRow
+                      message={message}
+                      isOwn={message.senderId === currentUserId}
+                      isGroup={isGroup}
+                      canDelete={
+                        message.senderId === currentUserId ||
+                        (isGroup && iAmAdmin)
+                      }
+                      receipt={receiptFor(message)}
+                      replyLabel={replyLabel(message)}
+                      galleryId={`chat-${conversationId}`}
+                      mentionNames={(message.mentions ?? [])
+                        .map((id) => memberNameById.get(id))
+                        .filter((name): name is string => name !== undefined)}
+                      onReply={handleReply}
+                      onForward={(msg) => setForwardMessage(msg)}
+                      onDownload={(msg) => void handleDownload(msg)}
+                      onDelete={(msg) => void handleDelete(msg)}
+                    />
+                  )}
+                </div>
+              );
+            })}
           </div>
           <div ref={bottomRef} />
         </div>
@@ -1551,6 +1597,27 @@ function MessagePanel({
           onClose={() => setForwardMessage(null)}
         />
       )}
+      </div>
+    </Fancybox>
+  );
+}
+
+function DaySeparator({ label }: { label: string }) {
+  return (
+    <div className="flex justify-center py-2">
+      <span className="rounded-lg bg-[#182229] px-3 py-1 text-xs font-medium text-white/60 shadow-sm">
+        {label}
+      </span>
+    </div>
+  );
+}
+
+function SystemMessage({ text }: { text: string }) {
+  return (
+    <div className="flex justify-center py-1">
+      <span className="max-w-[85%] rounded-lg bg-[#182229] px-3 py-1.5 text-center text-xs text-white/70 shadow-sm">
+        {text}
+      </span>
     </div>
   );
 }
@@ -1576,6 +1643,7 @@ function MessageRow({
   canDelete,
   receipt,
   replyLabel,
+  galleryId,
   mentionNames,
   onReply,
   onForward,
@@ -1588,6 +1656,7 @@ function MessageRow({
   canDelete: boolean;
   receipt: MessageReceipt | null;
   replyLabel: string;
+  galleryId: string;
   mentionNames: string[];
   onReply: (message: ChatMessage) => void;
   onForward: (message: ChatMessage) => void;
@@ -1687,7 +1756,7 @@ function MessageRow({
         )}
 
         {message.type === "text" ? (
-          <p className="whitespace-pre-wrap break-words pr-5 text-[15px] text-white">
+          <p className="whitespace-pre-wrap wrap-break-word pr-5 text-[15px] text-white">
             {renderTextWithMentions(message.text ?? "", mentionNames).map(
               (part, index) =>
                 typeof part === "string" ? (
@@ -1704,12 +1773,18 @@ function MessageRow({
           </p>
         ) : (
           message.imageUrl && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={message.imageUrl}
-              alt="Shared image"
-              className="max-h-80 rounded-md object-cover"
-            />
+            <a
+              href={message.imageUrl}
+              data-fancybox={galleryId}
+              className="block"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={message.imageUrl}
+                alt="Shared image"
+                className="max-h-80 cursor-pointer rounded-md object-cover"
+              />
+            </a>
           )
         )}
         <div
@@ -2181,9 +2256,8 @@ function ContactInfoPanel({
                 <a
                   key={image._id}
                   href={image.imageUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="aspect-square overflow-hidden rounded-md bg-[#202c33]"
+                  data-fancybox={`media-${conversationId}`}
+                  className="aspect-square cursor-pointer overflow-hidden rounded-md bg-[#202c33]"
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img

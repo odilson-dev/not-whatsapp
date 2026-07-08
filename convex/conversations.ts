@@ -17,6 +17,7 @@ import {
   getMemberIds,
   getMembership,
 } from "./lib/members";
+import { postSystemMessage } from "./lib/systemMessages";
 
 const publicUserValidator = v.object({
   _id: v.id("users"),
@@ -388,6 +389,13 @@ export const createGroup = mutation({
       });
     }
 
+    await postSystemMessage(
+      ctx,
+      conversationId,
+      user._id,
+      `${user.name} created the group "${name}"`,
+    );
+
     return conversationId;
   },
 });
@@ -418,6 +426,13 @@ export const leaveGroup = mutation({
     if (membership) {
       await ctx.db.delete("conversationMembers", membership._id);
     }
+
+    await postSystemMessage(
+      ctx,
+      args.conversationId,
+      user._id,
+      `${user.name} left`,
+    );
 
     await ensureGroupHasAdmin(ctx, args.conversationId);
 
@@ -462,6 +477,7 @@ export const addGroupMembers = mutation({
     const user = await getCurrentUser(ctx);
     await assertGroupAdmin(ctx, args.conversationId, user._id);
 
+    const addedNames: string[] = [];
     for (const memberId of args.memberIds) {
       const member = await ctx.db.get("users", memberId);
       if (!member) {
@@ -474,7 +490,17 @@ export const addGroupMembers = mutation({
           userId: memberId,
           role: "member",
         });
+        addedNames.push(member.name);
       }
+    }
+
+    if (addedNames.length > 0) {
+      await postSystemMessage(
+        ctx,
+        args.conversationId,
+        user._id,
+        `${user.name} added ${addedNames.join(", ")}`,
+      );
     }
 
     return null;
@@ -502,6 +528,13 @@ export const removeGroupMember = mutation({
     );
     if (membership) {
       await ctx.db.delete("conversationMembers", membership._id);
+      const removed = await ctx.db.get("users", args.memberId);
+      await postSystemMessage(
+        ctx,
+        args.conversationId,
+        user._id,
+        `${user.name} removed ${removed?.name ?? "a member"}`,
+      );
     }
 
     await ensureGroupHasAdmin(ctx, args.conversationId);
@@ -530,9 +563,23 @@ export const setGroupAdmin = mutation({
       throw new Error("That person is not a member of this group");
     }
 
+    const wasAdmin = membership.role === "admin";
     await ctx.db.patch("conversationMembers", membership._id, {
       role: args.isAdmin ? "admin" : "member",
     });
+
+    if (wasAdmin !== args.isAdmin) {
+      const target = await ctx.db.get("users", args.memberId);
+      const targetName = target?.name ?? "a member";
+      await postSystemMessage(
+        ctx,
+        args.conversationId,
+        user._id,
+        args.isAdmin
+          ? `${user.name} made ${targetName} an admin`
+          : `${user.name} dismissed ${targetName} as admin`,
+      );
+    }
 
     await ensureGroupHasAdmin(ctx, args.conversationId);
 
@@ -549,19 +596,29 @@ export const updateGroup = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
-    await assertGroupAdmin(ctx, args.conversationId, user._id);
+    const conversation = await assertGroupAdmin(
+      ctx,
+      args.conversationId,
+      user._id,
+    );
 
     const patch: {
       name?: string;
       imageUrl?: string;
     } = {};
 
+    let nameChanged: string | undefined;
+    let imageChanged = false;
+
     if (args.name !== undefined) {
       const name = args.name.trim();
       if (name.length === 0) {
         throw new Error("Group name cannot be empty");
       }
-      patch.name = name;
+      if (name !== conversation.name) {
+        patch.name = name;
+        nameChanged = name;
+      }
     }
 
     if (args.imageStorageId !== undefined) {
@@ -570,10 +627,28 @@ export const updateGroup = mutation({
         throw new Error("Uploaded image not found");
       }
       patch.imageUrl = url;
+      imageChanged = true;
     }
 
     if (Object.keys(patch).length > 0) {
       await ctx.db.patch("conversations", args.conversationId, patch);
+    }
+
+    if (nameChanged !== undefined) {
+      await postSystemMessage(
+        ctx,
+        args.conversationId,
+        user._id,
+        `${user.name} changed the group name to "${nameChanged}"`,
+      );
+    }
+    if (imageChanged) {
+      await postSystemMessage(
+        ctx,
+        args.conversationId,
+        user._id,
+        `${user.name} changed the group icon`,
+      );
     }
 
     return null;

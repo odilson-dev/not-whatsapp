@@ -1,7 +1,19 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
-const messageTypeValidator = v.union(v.literal("text"), v.literal("image"));
+// Types that a user can actually author and that show up as a conversation
+// preview. System messages are never used as a preview type.
+const previewMessageTypeValidator = v.union(
+  v.literal("text"),
+  v.literal("image"),
+);
+
+// All message types, including admin/membership "system" events.
+const messageTypeValidator = v.union(
+  v.literal("text"),
+  v.literal("image"),
+  v.literal("system"),
+);
 
 export default defineSchema({
   users: defineTable({
@@ -30,7 +42,7 @@ export default defineSchema({
     memberTwoId: v.optional(v.id("users")),
     lastMessageAt: v.number(),
     lastMessagePreview: v.optional(v.string()),
-    lastMessageType: v.optional(messageTypeValidator),
+    lastMessageType: v.optional(previewMessageTypeValidator),
   })
     .index("by_members", ["memberOneId", "memberTwoId"]),
 

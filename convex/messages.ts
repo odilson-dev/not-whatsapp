@@ -13,7 +13,11 @@ import {
   isGroupAdmin,
 } from "./lib/members";
 
-const messageTypeValidator = v.union(v.literal("text"), v.literal("image"));
+const messageTypeValidator = v.union(
+  v.literal("text"),
+  v.literal("image"),
+  v.literal("system"),
+);
 
 const replyToValidator = v.object({
   messageId: v.id("messages"),
@@ -267,6 +271,9 @@ export const forward = mutation({
     if (!original) {
       throw new Error("Message not found");
     }
+    if (original.type === "system") {
+      throw new Error("System messages cannot be forwarded");
+    }
     // Caller must be a member of both the source and the target conversation.
     await assertConversationMember(ctx, original.conversationId, user._id);
     const targetConversation = await assertConversationMember(
@@ -355,8 +362,8 @@ export const remove = mutation({
         await ctx.db.patch("conversations", message.conversationId, {
           lastMessageAt: latest.createdAt,
           lastMessagePreview:
-            latest.type === "text" ? latest.text : "Photo",
-          lastMessageType: latest.type,
+            latest.type === "image" ? "Photo" : latest.text,
+          lastMessageType: latest.type === "image" ? "image" : "text",
         });
       } else {
         await ctx.db.patch("conversations", message.conversationId, {
