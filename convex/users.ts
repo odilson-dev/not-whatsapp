@@ -106,6 +106,49 @@ export const me = query({
   },
 });
 
+const publicUserValidator = v.object({
+  _id: v.id("users"),
+  name: v.string(),
+  email: v.optional(v.string()),
+  profileImage: v.optional(v.string()),
+});
+
+export const search = query({
+  args: {
+    query: v.string(),
+  },
+  returns: v.array(publicUserValidator),
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    const searchTerm = args.query.trim().toLowerCase();
+
+    if (searchTerm.length === 0) {
+      return [];
+    }
+
+    const users = await ctx.db.query("users").collect();
+
+    return users
+      .filter((candidate) => {
+        if (candidate._id === user._id) {
+          return false;
+        }
+
+        return (
+          candidate.name.toLowerCase().includes(searchTerm) ||
+          candidate.email?.toLowerCase().includes(searchTerm) === true
+        );
+      })
+      .slice(0, 20)
+      .map((candidate) => ({
+        _id: candidate._id,
+        name: candidate.name,
+        email: candidate.email,
+        profileImage: candidate.profileImage,
+      }));
+  },
+});
+
 export const generateUploadUrl = mutation({
   args: {},
   returns: v.string(),

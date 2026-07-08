@@ -1,11 +1,13 @@
 "use client";
 
 import { UserButton, useAuth } from "@clerk/nextjs";
+import { usePathname } from "next/navigation";
 
 export function AuthHeader() {
   const { isSignedIn } = useAuth();
+  const pathname = usePathname();
 
-  if (!isSignedIn) {
+  if (!isSignedIn || pathname.startsWith("/chat")) {
     return null;
   }
 
