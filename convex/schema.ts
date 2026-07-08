@@ -11,6 +11,7 @@ export default defineSchema({
     name: v.string(),
     email: v.optional(v.string()),
     profileImage: v.optional(v.string()),
+    lastSeen: v.optional(v.number()),
   })
     .index("by_tokenIdentifier", ["tokenIdentifier"])
     .index("user_id", ["userId"])
@@ -35,6 +36,17 @@ export default defineSchema({
     text: v.optional(v.string()),
     imageUrl: v.optional(v.string()),
     createdAt: v.number(),
+    forwarded: v.optional(v.boolean()),
+    // Denormalized snapshot of the message being replied to, so the reply
+    // still renders even if the original is later deleted.
+    replyTo: v.optional(
+      v.object({
+        messageId: v.id("messages"),
+        senderId: v.id("users"),
+        type: messageTypeValidator,
+        text: v.optional(v.string()),
+      }),
+    ),
   }).index("by_conversation", ["conversationId", "createdAt"]),
 
   // Per-user state for a conversation (archive/pin/favorite/read status,

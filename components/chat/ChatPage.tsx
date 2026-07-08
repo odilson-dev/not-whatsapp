@@ -9,7 +9,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { formatConversationTime, formatMessageTime } from "@/lib/format-time";
+import {
+  formatConversationTime,
+  formatLastSeen,
+  formatMessageTime,
+} from "@/lib/format-time";
 import { cn } from "@/lib/utils";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -20,12 +24,17 @@ import {
   ArrowLeft,
   Ban,
   Camera,
+  Check,
   CheckCheck,
+  ChevronDown,
+  Download,
+  Forward,
   Loader2,
   MessageSquare,
   MoreVertical,
   Pin,
   PinOff,
+  Reply,
   Search,
   Star,
   StarOff,
@@ -53,11 +62,73 @@ type ConversationPreview = {
   isBlocked: boolean;
 };
 
+const ONLINE_THRESHOLD_MS = 60_000;
+
+function useNow(intervalMs: number): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(interval);
+  }, [intervalMs]);
+  return now;
+}
+
+function presenceLabel(lastSeen: number | undefined, now: number): string {
+  if (lastSeen === undefined) {
+    return "";
+  }
+  if (now - lastSeen < ONLINE_THRESHOLD_MS) {
+    return "online";
+  }
+  return formatLastSeen(lastSeen);
+}
+
+type MessageReceipt = "sent" | "delivered" | "read";
+
+type ChatMessage = {
+  _id: Id<"messages">;
+  _creationTime: number;
+  conversationId: Id<"conversations">;
+  senderId: Id<"users">;
+  type: "text" | "image";
+  text?: string;
+  imageUrl?: string;
+  createdAt: number;
+  forwarded?: boolean;
+  replyTo?: {
+    messageId: Id<"messages">;
+    senderId: Id<"users">;
+    type: "text" | "image";
+    text?: string;
+  };
+};
+
 export function ChatPage() {
   const currentUser = useQuery(api.users.me);
   const conversations = useQuery(api.conversations.list);
   const getOrCreateConversation = useMutation(api.conversations.getOrCreate);
   const markRead = useMutation(api.conversations.markRead);
+  const heartbeat = useMutation(api.users.heartbeat);
+
+  useEffect(() => {
+    void heartbeat();
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void heartbeat();
+      }
+    }, 15000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        void heartbeat();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [heartbeat]);
 
   const [selectedConversationId, setSelectedConversationId] =
     useState<Id<"conversations"> | null>(null);
@@ -247,6 +318,7 @@ export function ChatPage() {
       <section className="hidden min-w-0 flex-1 md:flex">
         {selectedConversation ? (
           <MessagePanel
+            key={selectedConversation._id}
             conversation={selectedConversation}
             currentUserId={currentUser._id}
             onDeleted={() => setSelectedConversationId(null)}
@@ -259,6 +331,7 @@ export function ChatPage() {
       {selectedConversation && (
         <section className="flex min-w-0 flex-1 md:hidden">
           <MessagePanel
+            key={selectedConversation._id}
             conversation={selectedConversation}
             currentUserId={currentUser._id}
             onBack={() => setSelectedConversationId(null)}
@@ -592,18 +665,47 @@ function MessagePanel({
   const otherUser = conversation.otherUser;
   const isBlocked = conversation.isBlocked;
   const sendMessage = useMutation(api.messages.send);
+  const deleteMessage = useMutation(api.messages.remove);
+  const markRead = useMutation(api.conversations.markRead);
   const generateUploadUrl = useMutation(api.users.generateUploadUrl);
+  const otherStatus = useQuery(api.conversations.otherMemberStatus, {
+    conversationId,
+  });
   const { results, status, loadMore } = usePaginatedQuery(
     api.messages.list,
     { conversationId },
     { initialNumItems: 50 },
   );
 
+  const now = useNow(30000);
+  const otherLastReadAt = otherStatus?.lastReadAt ?? 0;
+  const otherLastSeen = otherStatus?.lastSeen;
+  const presence = presenceLabel(otherLastSeen, now);
+
+  const receiptFor = (message: ChatMessage): MessageReceipt | null => {
+    if (message.senderId !== currentUserId) {
+      return null;
+    }
+    if (otherLastReadAt >= message.createdAt) {
+      return "read";
+    }
+    if (otherLastSeen !== undefined && otherLastSeen >= message.createdAt) {
+      return "delivered";
+    }
+    return "sent";
+  };
+
   const [draft, setDraft] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showContactInfo, setShowContactInfo] = useState(false);
+  const [replyTarget, setReplyTarget] = useState<ChatMessage | null>(null);
+  const [forwardMessage, setForwardMessage] = useState<ChatMessage | null>(
+    null,
+  );
   const bottomRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const messages = useMemo(() => [...(results ?? [])].reverse(), [results]);
@@ -611,6 +713,13 @@ function MessagePanel({
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length, conversationId]);
+
+  const latestIncomingAt = messages.length > 0 ? messages[messages.length - 1].createdAt : 0;
+  useEffect(() => {
+    if (latestIncomingAt > 0) {
+      void markRead({ conversationId });
+    }
+  }, [conversationId, latestIncomingAt, markRead]);
 
   const handleSend = async () => {
     const text = draft.trim();
@@ -622,12 +731,53 @@ function MessagePanel({
     setError(null);
 
     try {
-      await sendMessage({ conversationId, text });
+      await sendMessage({
+        conversationId,
+        text,
+        replyToId: replyTarget?._id,
+      });
       setDraft("");
+      setReplyTarget(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send message");
     } finally {
       setIsSending(false);
+    }
+  };
+
+  const handleReply = (message: ChatMessage) => {
+    setReplyTarget(message);
+    composerRef.current?.focus();
+  };
+
+  const handleDelete = async (message: ChatMessage) => {
+    try {
+      await deleteMessage({ messageId: message._id });
+      if (replyTarget?._id === message._id) {
+        setReplyTarget(null);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete message");
+    }
+  };
+
+  const handleDownload = async (message: ChatMessage) => {
+    if (!message.imageUrl) {
+      return;
+    }
+    try {
+      const response = await fetch(message.imageUrl);
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = `image-${message._id}.jpg`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      setError("Failed to download image");
     }
   };
 
@@ -674,8 +824,14 @@ function MessagePanel({
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col bg-[#0b141a]">
-      <header className="flex items-center gap-3 border-b border-white/10 bg-[#202c33] px-4 py-3">
+    <div className="flex h-full min-h-0 flex-1">
+      <div
+        className={cn(
+          "flex h-full min-h-0 flex-1 flex-col bg-[#0b141a]",
+          showContactInfo && "hidden md:flex",
+        )}
+      >
+        <header className="flex items-center gap-3 border-b border-white/10 bg-[#202c33] px-4 py-3">
         {onBack && (
           <Button
             variant="ghost"
@@ -686,17 +842,37 @@ function MessagePanel({
             ←
           </Button>
         )}
-        <UserAvatar
-          name={otherUser.name}
-          imageUrl={otherUser.profileImage}
-          className="size-10"
-        />
-        <div className="min-w-0 flex-1">
-          <p className="truncate font-medium">{otherUser.name}</p>
-          {otherUser.email && (
-            <p className="truncate text-xs text-white/50">{otherUser.email}</p>
-          )}
-        </div>
+        <button
+          type="button"
+          onClick={() => setShowContactInfo((value) => !value)}
+          className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left transition-colors hover:opacity-90"
+          aria-label="View contact info"
+        >
+          <UserAvatar
+            name={otherUser.name}
+            imageUrl={otherUser.profileImage}
+            className="size-10"
+          />
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-medium">{otherUser.name}</p>
+            {presence ? (
+              <p
+                className={cn(
+                  "truncate text-xs",
+                  presence === "online" ? "text-[#00A884]" : "text-white/50",
+                )}
+              >
+                {presence}
+              </p>
+            ) : (
+              otherUser.email && (
+                <p className="truncate text-xs text-white/50">
+                  {otherUser.email}
+                </p>
+              )
+            )}
+          </div>
+        </button>
         <ConversationActionsMenu
           conversation={conversation}
           align="end"
@@ -728,49 +904,20 @@ function MessagePanel({
         )}
 
         <div className="space-y-2">
-          {messages.map((message) => {
-            const isOwn = message.senderId === currentUserId;
-
-            return (
-              <div
-                key={message._id}
-                className={cn("flex", isOwn ? "justify-end" : "justify-start")}
-              >
-                <div
-                  className={cn(
-                    "max-w-[75%] rounded-lg px-3 py-2 shadow-sm",
-                    isOwn
-                      ? "rounded-tr-none bg-[#005c4b]"
-                      : "rounded-tl-none bg-[#202c33]",
-                    message.type === "image" && "p-1",
-                  )}
-                >
-                  {message.type === "text" ? (
-                    <p className="whitespace-pre-wrap break-words text-[15px] text-white">
-                      {message.text}
-                    </p>
-                  ) : (
-                    message.imageUrl && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={message.imageUrl}
-                        alt="Shared image"
-                        className="max-h-80 rounded-md object-cover"
-                      />
-                    )
-                  )}
-                  <p
-                    className={cn(
-                      "mt-1 text-[11px] text-white/50",
-                      isOwn ? "text-right" : "text-left",
-                    )}
-                  >
-                    {formatMessageTime(message.createdAt)}
-                  </p>
-                </div>
-              </div>
-            );
-          })}
+          {messages.map((message) => (
+            <MessageRow
+              key={message._id}
+              message={message}
+              isOwn={message.senderId === currentUserId}
+              receipt={receiptFor(message)}
+              currentUserId={currentUserId}
+              otherUserName={otherUser.name}
+              onReply={handleReply}
+              onForward={(msg) => setForwardMessage(msg)}
+              onDownload={(msg) => void handleDownload(msg)}
+              onDelete={(msg) => void handleDelete(msg)}
+            />
+          ))}
         </div>
         <div ref={bottomRef} />
       </div>
@@ -779,6 +926,30 @@ function MessagePanel({
         <BlockedComposer otherUserId={otherUser._id} />
       ) : (
         <footer className="border-t border-white/10 bg-[#202c33] px-4 py-3">
+        {replyTarget && (
+          <div className="mb-2 flex items-center gap-2 rounded-lg bg-[#111B21] px-3 py-2">
+            <div className="min-w-0 flex-1 border-l-2 border-[#00A884] pl-2">
+              <p className="text-xs font-medium text-[#00A884]">
+                {replyTarget.senderId === currentUserId
+                  ? "You"
+                  : otherUser.name}
+              </p>
+              <p className="truncate text-sm text-white/60">
+                {replyTarget.type === "image"
+                  ? "Photo"
+                  : (replyTarget.text ?? "")}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setReplyTarget(null)}
+              className="rounded-full p-1 text-white/60 hover:bg-white/10 hover:text-white"
+              aria-label="Cancel reply"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+        )}
         <div className="flex items-end gap-2">
           <button
             type="button"
@@ -801,6 +972,7 @@ function MessagePanel({
             onChange={(event) => void handleImageUpload(event)}
           />
           <textarea
+            ref={composerRef}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             placeholder="Type a message"
@@ -824,7 +996,359 @@ function MessagePanel({
         {error && <p className="mt-2 text-sm text-red-300">{error}</p>}
         </footer>
       )}
+      </div>
+
+      {showContactInfo && (
+        <ContactInfoPanel
+          conversationId={conversationId}
+          otherUser={otherUser}
+          presence={presence}
+          onClose={() => setShowContactInfo(false)}
+        />
+      )}
+
+      {forwardMessage && (
+        <ForwardDialog
+          message={forwardMessage}
+          currentConversationId={conversationId}
+          onClose={() => setForwardMessage(null)}
+        />
+      )}
     </div>
+  );
+}
+
+function MessageReceiptTicks({ receipt }: { receipt: MessageReceipt }) {
+  if (receipt === "sent") {
+    return <Check className="size-3.5 text-white/50" />;
+  }
+  return (
+    <CheckCheck
+      className={cn(
+        "size-3.5",
+        receipt === "read" ? "text-[#53bdeb]" : "text-white/50",
+      )}
+    />
+  );
+}
+
+function MessageRow({
+  message,
+  isOwn,
+  receipt,
+  currentUserId,
+  otherUserName,
+  onReply,
+  onForward,
+  onDownload,
+  onDelete,
+}: {
+  message: ChatMessage;
+  isOwn: boolean;
+  receipt: MessageReceipt | null;
+  currentUserId: Id<"users">;
+  otherUserName: string;
+  onReply: (message: ChatMessage) => void;
+  onForward: (message: ChatMessage) => void;
+  onDownload: (message: ChatMessage) => void;
+  onDelete: (message: ChatMessage) => void;
+}) {
+  return (
+    <div className={cn("flex", isOwn ? "justify-end" : "justify-start")}>
+      <div
+        className={cn(
+          "group/msg relative max-w-[75%] rounded-lg px-3 py-2 shadow-sm",
+          isOwn
+            ? "rounded-tr-none bg-[#005c4b]"
+            : "rounded-tl-none bg-[#202c33]",
+          message.type === "image" && "p-1",
+        )}
+      >
+        <div className="absolute right-1 top-1 z-10 opacity-0 transition-opacity group-hover/msg:opacity-100 focus-within:opacity-100">
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              aria-label="Message options"
+              className="rounded-md bg-black/40 p-0.5 text-white/90 transition-colors hover:bg-black/60"
+            >
+              <ChevronDown className="size-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align={isOwn ? "end" : "start"} side="bottom">
+              <DropdownMenuItem onClick={() => onReply(message)}>
+                <Reply />
+                Reply
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onForward(message)}>
+                <Forward />
+                Forward
+              </DropdownMenuItem>
+              {message.type === "image" && (
+                <DropdownMenuItem onClick={() => onDownload(message)}>
+                  <Download />
+                  Download
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                variant="destructive"
+                onClick={() => onDelete(message)}
+              >
+                <Trash2 />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        {message.forwarded && (
+          <p className="mb-0.5 flex items-center gap-1 text-xs italic text-white/40">
+            <Forward className="size-3" />
+            Forwarded
+          </p>
+        )}
+
+        {message.replyTo && (
+          <div
+            className={cn(
+              "mb-1 rounded border-l-2 border-[#00A884] px-2 py-1 text-xs",
+              isOwn ? "bg-black/20" : "bg-black/25",
+            )}
+          >
+            <p className="font-medium text-[#00A884]">
+              {message.replyTo.senderId === currentUserId
+                ? "You"
+                : otherUserName}
+            </p>
+            <p className="truncate text-white/60">
+              {message.replyTo.type === "image"
+                ? "Photo"
+                : (message.replyTo.text ?? "")}
+            </p>
+          </div>
+        )}
+
+        {message.type === "text" ? (
+          <p className="whitespace-pre-wrap break-words pr-5 text-[15px] text-white">
+            {message.text}
+          </p>
+        ) : (
+          message.imageUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={message.imageUrl}
+              alt="Shared image"
+              className="max-h-80 rounded-md object-cover"
+            />
+          )
+        )}
+        <div
+          className={cn(
+            "mt-1 flex items-center gap-1 text-[11px] text-white/50",
+            isOwn ? "justify-end" : "justify-start",
+          )}
+        >
+          <span>{formatMessageTime(message.createdAt)}</span>
+          {receipt && <MessageReceiptTicks receipt={receipt} />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ForwardDialog({
+  message,
+  currentConversationId,
+  onClose,
+}: {
+  message: ChatMessage;
+  currentConversationId: Id<"conversations">;
+  onClose: () => void;
+}) {
+  const conversations = useQuery(api.conversations.list);
+  const forward = useMutation(api.messages.forward);
+  const [search, setSearch] = useState("");
+  const [forwardingTo, setForwardingTo] = useState<Id<"conversations"> | null>(
+    null,
+  );
+  const [error, setError] = useState<string | null>(null);
+
+  const targets = useMemo(() => {
+    if (!conversations) {
+      return [];
+    }
+    const term = search.trim().toLowerCase();
+    return conversations.filter((conversation) => {
+      if (conversation._id === currentConversationId) {
+        return false;
+      }
+      if (!term) {
+        return true;
+      }
+      return conversation.otherUser.name.toLowerCase().includes(term);
+    });
+  }, [conversations, search, currentConversationId]);
+
+  const handleForward = async (targetConversationId: Id<"conversations">) => {
+    setForwardingTo(targetConversationId);
+    setError(null);
+    try {
+      await forward({ messageId: message._id, targetConversationId });
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to forward");
+      setForwardingTo(null);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-4 pt-16">
+      <div className="w-full max-w-md overflow-hidden rounded-xl bg-[#111B21] shadow-2xl ring-1 ring-white/10">
+        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+          <h2 className="text-lg font-medium text-white">Forward message to</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-1 text-white/70 hover:bg-white/5 hover:text-white"
+            aria-label="Close"
+          >
+            <X className="size-5" />
+          </button>
+        </div>
+
+        <div className="p-4">
+          <label className="relative block">
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-white/40" />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search chats"
+              autoFocus
+              className="w-full rounded-lg bg-[#202c33] py-2.5 pr-3 pl-10 text-sm text-white outline-none placeholder:text-white/40 focus:ring-1 focus:ring-[#00A884]/50"
+            />
+          </label>
+        </div>
+
+        <div className="max-h-80 overflow-y-auto border-t border-white/10">
+          {conversations === undefined ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="size-6 animate-spin text-[#00A884]" />
+            </div>
+          ) : targets.length === 0 ? (
+            <p className="px-4 py-6 text-sm text-white/50">No chats found.</p>
+          ) : (
+            targets.map((conversation) => (
+              <button
+                key={conversation._id}
+                type="button"
+                disabled={forwardingTo !== null}
+                onClick={() => void handleForward(conversation._id)}
+                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[#202c33] disabled:opacity-60"
+              >
+                <UserAvatar
+                  name={conversation.otherUser.name}
+                  imageUrl={conversation.otherUser.profileImage}
+                  className="size-10"
+                />
+                <p className="min-w-0 flex-1 truncate font-medium text-white">
+                  {conversation.otherUser.name}
+                </p>
+                {forwardingTo === conversation._id && (
+                  <Loader2 className="size-4 animate-spin text-[#00A884]" />
+                )}
+              </button>
+            ))
+          )}
+        </div>
+        {error && <p className="px-4 py-2 text-sm text-red-300">{error}</p>}
+      </div>
+    </div>
+  );
+}
+
+function ContactInfoPanel({
+  conversationId,
+  otherUser,
+  presence,
+  onClose,
+}: {
+  conversationId: Id<"conversations">;
+  otherUser: ConversationPreview["otherUser"];
+  presence: string;
+  onClose: () => void;
+}) {
+  const images = useQuery(api.messages.listSharedImages, { conversationId });
+
+  return (
+    <aside className="flex h-full w-full min-w-0 flex-col border-l border-white/10 bg-[#111B21] md:w-[380px] md:shrink-0">
+      <header className="flex items-center gap-4 border-b border-white/10 bg-[#202c33] px-4 py-3">
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-full p-1.5 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+          aria-label="Close contact info"
+        >
+          <X className="size-5" />
+        </button>
+        <p className="font-medium">Contact info</p>
+      </header>
+
+      <div className="flex-1 overflow-y-auto">
+        <div className="flex flex-col items-center gap-3 bg-[#111B21] px-6 py-8 text-center">
+          <UserAvatar
+            name={otherUser.name}
+            imageUrl={otherUser.profileImage}
+            className="size-40"
+          />
+          <h2 className="mt-2 text-xl font-medium text-white">
+            {otherUser.name}
+          </h2>
+          {otherUser.email && (
+            <p className="text-sm text-white/50">{otherUser.email}</p>
+          )}
+          {presence && (
+            <p
+              className={cn(
+                "text-sm",
+                presence === "online" ? "text-[#00A884]" : "text-white/50",
+              )}
+            >
+              {presence}
+            </p>
+          )}
+        </div>
+
+        <div className="mt-2 bg-[#111B21] px-4 py-4">
+          <p className="mb-3 text-sm text-white/60">Shared media</p>
+          {images === undefined ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="size-6 animate-spin text-[#00A884]" />
+            </div>
+          ) : images.length === 0 ? (
+            <p className="py-6 text-center text-sm text-white/40">
+              No media shared yet.
+            </p>
+          ) : (
+            <div className="grid grid-cols-3 gap-1">
+              {images.map((image) => (
+                <a
+                  key={image._id}
+                  href={image.imageUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="aspect-square overflow-hidden rounded-md bg-[#202c33]"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={image.imageUrl}
+                    alt="Shared media"
+                    className="size-full object-cover transition-transform hover:scale-105"
+                  />
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </aside>
   );
 }
 

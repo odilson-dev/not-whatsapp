@@ -12,6 +12,7 @@ const userValidator = v.object({
   name: v.string(),
   email: v.optional(v.string()),
   profileImage: v.optional(v.string()),
+  lastSeen: v.optional(v.number()),
 });
 
 function profileFromIdentity(
@@ -146,6 +147,16 @@ export const search = query({
         email: candidate.email,
         profileImage: candidate.profileImage,
       }));
+  },
+});
+
+export const heartbeat = mutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const user = await getCurrentUser(ctx);
+    await ctx.db.patch("users", user._id, { lastSeen: Date.now() });
+    return null;
   },
 });
 

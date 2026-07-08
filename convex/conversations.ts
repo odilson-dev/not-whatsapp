@@ -145,6 +145,40 @@ export const list = query({
   },
 });
 
+export const otherMemberStatus = query({
+  args: {
+    conversationId: v.id("conversations"),
+  },
+  returns: v.object({
+    otherUserId: v.id("users"),
+    lastReadAt: v.number(),
+    lastSeen: v.optional(v.number()),
+  }),
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    const conversation = await assertConversationMember(
+      ctx,
+      args.conversationId,
+      user._id,
+    );
+
+    const otherUserId = getOtherMemberId(conversation, user._id);
+    const otherUser = await ctx.db.get("users", otherUserId);
+
+    const otherState = await getConversationState(
+      ctx,
+      otherUserId,
+      args.conversationId,
+    );
+
+    return {
+      otherUserId,
+      lastReadAt: otherState?.lastReadAt ?? 0,
+      lastSeen: otherUser?.lastSeen,
+    };
+  },
+});
+
 export const getOrCreate = mutation({
   args: {
     otherUserId: v.id("users"),
