@@ -2,17 +2,34 @@
 
 import { UserAvatar } from "@/components/chat/UserAvatar";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { formatConversationTime, formatMessageTime } from "@/lib/format-time";
 import { cn } from "@/lib/utils";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import {
+  Archive,
+  ArchiveRestore,
+  ArrowLeft,
+  Ban,
   Camera,
+  CheckCheck,
   Loader2,
   MessageSquare,
   MoreVertical,
+  Pin,
+  PinOff,
   Search,
+  Star,
+  StarOff,
+  Trash2,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -29,16 +46,23 @@ type ConversationPreview = {
     email?: string;
     profileImage?: string;
   };
+  isArchived: boolean;
+  isPinned: boolean;
+  isFavorite: boolean;
+  unread: boolean;
+  isBlocked: boolean;
 };
 
 export function ChatPage() {
   const currentUser = useQuery(api.users.me);
   const conversations = useQuery(api.conversations.list);
   const getOrCreateConversation = useMutation(api.conversations.getOrCreate);
+  const markRead = useMutation(api.conversations.markRead);
 
   const [selectedConversationId, setSelectedConversationId] =
     useState<Id<"conversations"> | null>(null);
   const [sidebarSearch, setSidebarSearch] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
   const [showNewChat, setShowNewChat] = useState(false);
   const [newChatQuery, setNewChatQuery] = useState("");
   const [debouncedNewChatQuery, setDebouncedNewChatQuery] = useState("");
@@ -57,24 +81,42 @@ export function ChatPage() {
     return () => clearTimeout(timeout);
   }, [newChatQuery]);
 
+  const archivedCount = useMemo(
+    () =>
+      conversations?.filter((conversation) => conversation.isArchived).length ??
+      0,
+    [conversations],
+  );
+
   const filteredConversations = useMemo(() => {
     if (!conversations) {
       return [];
     }
 
     const term = sidebarSearch.trim().toLowerCase();
-    if (!term) {
-      return conversations;
-    }
 
-    return conversations.filter((conversation) =>
-      conversation.otherUser.name.toLowerCase().includes(term),
-    );
-  }, [conversations, sidebarSearch]);
+    return conversations.filter((conversation) => {
+      const matchesView = showArchived
+        ? conversation.isArchived
+        : !conversation.isArchived;
+      if (!matchesView) {
+        return false;
+      }
+      if (!term) {
+        return true;
+      }
+      return conversation.otherUser.name.toLowerCase().includes(term);
+    });
+  }, [conversations, sidebarSearch, showArchived]);
 
   const selectedConversation = conversations?.find(
     (conversation) => conversation._id === selectedConversationId,
   );
+
+  const handleSelectConversation = (conversationId: Id<"conversations">) => {
+    setSelectedConversationId(conversationId);
+    void markRead({ conversationId });
+  };
 
   useEffect(() => {
     if (
@@ -92,7 +134,8 @@ export function ChatPage() {
     setIsStartingChat(true);
     try {
       const conversationId = await getOrCreateConversation({ otherUserId });
-      setSelectedConversationId(conversationId);
+      setShowArchived(false);
+      handleSelectConversation(conversationId);
       setShowNewChat(false);
       setNewChatQuery("");
       setDebouncedNewChatQuery("");
@@ -154,12 +197,39 @@ export function ChatPage() {
           </label>
         </div>
 
+        {showArchived && (
+          <button
+            type="button"
+            onClick={() => setShowArchived(false)}
+            className="flex items-center gap-3 border-b border-white/5 px-4 py-3 text-sm text-white/80 transition-colors hover:bg-[#202c33]"
+          >
+            <ArrowLeft className="size-4" />
+            <span className="font-medium">Archived</span>
+          </button>
+        )}
+
+        {!showArchived && archivedCount > 0 && sidebarSearch.trim() === "" && (
+          <button
+            type="button"
+            onClick={() => setShowArchived(true)}
+            className="flex w-full items-center gap-3 border-b border-white/5 px-4 py-3 text-sm text-white/80 transition-colors hover:bg-[#202c33]"
+          >
+            <Archive className="size-4 text-[#00A884]" />
+            <span className="font-medium">Archived</span>
+            <span className="ml-auto text-xs text-white/45">
+              {archivedCount}
+            </span>
+          </button>
+        )}
+
         <div className="flex-1 overflow-y-auto">
           {filteredConversations.length === 0 ? (
             <div className="px-6 py-10 text-center text-sm text-white/50">
-              {conversations.length === 0
-                ? "No chats yet. Start a new conversation."
-                : "No chats match your search."}
+              {showArchived
+                ? "No archived chats."
+                : conversations.length === 0
+                  ? "No chats yet. Start a new conversation."
+                  : "No chats match your search."}
             </div>
           ) : (
             filteredConversations.map((conversation) => (
@@ -167,7 +237,7 @@ export function ChatPage() {
                 key={conversation._id}
                 conversation={conversation}
                 isSelected={selectedConversationId === conversation._id}
-                onSelect={() => setSelectedConversationId(conversation._id)}
+                onSelect={() => handleSelectConversation(conversation._id)}
               />
             ))
           )}
@@ -177,9 +247,9 @@ export function ChatPage() {
       <section className="hidden min-w-0 flex-1 md:flex">
         {selectedConversation ? (
           <MessagePanel
-            conversationId={selectedConversation._id}
+            conversation={selectedConversation}
             currentUserId={currentUser._id}
-            otherUser={selectedConversation.otherUser}
+            onDeleted={() => setSelectedConversationId(null)}
           />
         ) : (
           <EmptyChatState />
@@ -189,10 +259,10 @@ export function ChatPage() {
       {selectedConversation && (
         <section className="flex min-w-0 flex-1 md:hidden">
           <MessagePanel
-            conversationId={selectedConversation._id}
+            conversation={selectedConversation}
             currentUserId={currentUser._id}
-            otherUser={selectedConversation.otherUser}
             onBack={() => setSelectedConversationId(null)}
+            onDeleted={() => setSelectedConversationId(null)}
           />
         </section>
       )}
@@ -225,11 +295,18 @@ function ConversationListItem({
   onSelect: () => void;
 }) {
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onSelect}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect();
+        }
+      }}
       className={cn(
-        "flex w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-[#202c33]",
+        "group/row flex w-full cursor-pointer items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-[#202c33]",
         isSelected && "bg-[#2a3942]",
       )}
     >
@@ -240,10 +317,20 @@ function ConversationListItem({
       />
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-2">
-          <p className="truncate font-medium text-white">
+          <p
+            className={cn(
+              "truncate font-medium text-white",
+              conversation.unread && "font-semibold",
+            )}
+          >
             {conversation.otherUser.name}
           </p>
-          <span className="shrink-0 text-xs text-white/45">
+          <span
+            className={cn(
+              "shrink-0 text-xs text-white/45",
+              conversation.unread && "text-[#00A884]",
+            )}
+          >
             {formatConversationTime(conversation.lastMessageAt)}
           </span>
         </div>
@@ -251,12 +338,143 @@ function ConversationListItem({
           {conversation.lastMessageType === "image" && (
             <Camera className="size-3.5 shrink-0" />
           )}
-          <p className="truncate">
+          <p
+            className={cn(
+              "truncate",
+              conversation.unread && "font-medium text-white/80",
+            )}
+          >
             {conversation.lastMessagePreview ?? "No messages yet"}
           </p>
+          <span className="ml-auto flex shrink-0 items-center gap-1.5 pl-1">
+            {conversation.isBlocked && (
+              <Ban className="size-3.5 text-red-400/70" />
+            )}
+            {conversation.isFavorite && (
+              <Star className="size-3.5 fill-[#00A884] text-[#00A884]" />
+            )}
+            {conversation.isPinned && (
+              <Pin className="size-3.5 text-white/45" />
+            )}
+            {conversation.unread && (
+              <span className="size-2.5 rounded-full bg-[#00A884]" />
+            )}
+          </span>
         </div>
       </div>
-    </button>
+
+      <div className="shrink-0 opacity-0 transition-opacity focus-within:opacity-100 group-hover/row:opacity-100">
+        <ConversationActionsMenu
+          conversation={conversation}
+          align="start"
+          side="bottom"
+          triggerClassName="rounded-full p-1.5 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+        />
+      </div>
+    </div>
+  );
+}
+
+function ConversationActionsMenu({
+  conversation,
+  align = "end",
+  side = "bottom",
+  triggerClassName,
+  onDeleted,
+}: {
+  conversation: ConversationPreview;
+  align?: "start" | "center" | "end";
+  side?: "top" | "bottom" | "left" | "right";
+  triggerClassName?: string;
+  onDeleted?: () => void;
+}) {
+  const setArchived = useMutation(api.conversations.setArchived);
+  const setPinned = useMutation(api.conversations.setPinned);
+  const setFavorite = useMutation(api.conversations.setFavorite);
+  const markRead = useMutation(api.conversations.markRead);
+  const markUnread = useMutation(api.conversations.markUnread);
+  const setBlocked = useMutation(api.conversations.setBlocked);
+  const removeConversation = useMutation(api.conversations.remove);
+
+  const conversationId = conversation._id;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label="Conversation options"
+        className={triggerClassName}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <MoreVertical className="size-5" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align={align} side={side}>
+        <DropdownMenuItem
+          onClick={() =>
+            void setArchived({
+              conversationId,
+              archived: !conversation.isArchived,
+            })
+          }
+        >
+          {conversation.isArchived ? <ArchiveRestore /> : <Archive />}
+          {conversation.isArchived ? "Unarchive chat" : "Archive chat"}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() =>
+            void setPinned({ conversationId, pinned: !conversation.isPinned })
+          }
+        >
+          {conversation.isPinned ? <PinOff /> : <Pin />}
+          {conversation.isPinned ? "Unpin chat" : "Pin chat"}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() =>
+            void (conversation.unread
+              ? markRead({ conversationId })
+              : markUnread({ conversationId }))
+          }
+        >
+          <CheckCheck />
+          {conversation.unread ? "Mark as read" : "Mark as unread"}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() =>
+            void setFavorite({
+              conversationId,
+              favorite: !conversation.isFavorite,
+            })
+          }
+        >
+          {conversation.isFavorite ? <StarOff /> : <Star />}
+          {conversation.isFavorite
+            ? "Remove from favourites"
+            : "Add to favourites"}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          variant="destructive"
+          onClick={() =>
+            void setBlocked({
+              otherUserId: conversation.otherUser._id,
+              blocked: !conversation.isBlocked,
+            })
+          }
+        >
+          <Ban />
+          {conversation.isBlocked ? "Unblock" : "Block"}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          variant="destructive"
+          onClick={() => {
+            void removeConversation({ conversationId });
+            onDeleted?.();
+          }}
+        >
+          <Trash2 />
+          Delete chat
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -360,16 +578,19 @@ function NewChatDialog({
 }
 
 function MessagePanel({
-  conversationId,
+  conversation,
   currentUserId,
-  otherUser,
   onBack,
+  onDeleted,
 }: {
-  conversationId: Id<"conversations">;
+  conversation: ConversationPreview;
   currentUserId: Id<"users">;
-  otherUser: ConversationPreview["otherUser"];
   onBack?: () => void;
+  onDeleted?: () => void;
 }) {
+  const conversationId = conversation._id;
+  const otherUser = conversation.otherUser;
+  const isBlocked = conversation.isBlocked;
   const sendMessage = useMutation(api.messages.send);
   const generateUploadUrl = useMutation(api.users.generateUploadUrl);
   const { results, status, loadMore } = usePaginatedQuery(
@@ -470,12 +691,19 @@ function MessagePanel({
           imageUrl={otherUser.profileImage}
           className="size-10"
         />
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="truncate font-medium">{otherUser.name}</p>
           {otherUser.email && (
             <p className="truncate text-xs text-white/50">{otherUser.email}</p>
           )}
         </div>
+        <ConversationActionsMenu
+          conversation={conversation}
+          align="end"
+          side="bottom"
+          triggerClassName="rounded-full p-2 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+          onDeleted={onDeleted}
+        />
       </header>
 
       <div
@@ -547,7 +775,10 @@ function MessagePanel({
         <div ref={bottomRef} />
       </div>
 
-      <footer className="border-t border-white/10 bg-[#202c33] px-4 py-3">
+      {isBlocked ? (
+        <BlockedComposer otherUserId={otherUser._id} />
+      ) : (
+        <footer className="border-t border-white/10 bg-[#202c33] px-4 py-3">
         <div className="flex items-end gap-2">
           <button
             type="button"
@@ -591,7 +822,28 @@ function MessagePanel({
           </Button>
         </div>
         {error && <p className="mt-2 text-sm text-red-300">{error}</p>}
-      </footer>
+        </footer>
+      )}
     </div>
+  );
+}
+
+function BlockedComposer({ otherUserId }: { otherUserId: Id<"users"> }) {
+  const setBlocked = useMutation(api.conversations.setBlocked);
+
+  return (
+    <footer className="flex flex-col items-center gap-2 border-t border-white/10 bg-[#202c33] px-4 py-4 text-center">
+      <p className="text-sm text-white/60">
+        You blocked this contact. Unblock them to send messages.
+      </p>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="text-[#00A884] hover:bg-[#00A884]/10 hover:text-[#06cf9c]"
+        onClick={() => void setBlocked({ otherUserId, blocked: false })}
+      >
+        Unblock
+      </Button>
+    </footer>
   );
 }

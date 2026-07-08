@@ -36,4 +36,30 @@ export default defineSchema({
     imageUrl: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_conversation", ["conversationId", "createdAt"]),
+
+  // Per-user state for a conversation (archive/pin/favorite/read status,
+  // and per-user "delete chat"). A conversation is a shared row between two
+  // users, so this state must be scoped to each user individually.
+  conversationStates: defineTable({
+    userId: v.id("users"),
+    conversationId: v.id("conversations"),
+    isArchived: v.boolean(),
+    isPinned: v.boolean(),
+    isFavorite: v.boolean(),
+    manualUnread: v.boolean(),
+    lastReadAt: v.number(),
+    pinnedAt: v.optional(v.number()),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_user_and_conversation", ["userId", "conversationId"])
+    .index("by_user", ["userId"]),
+
+  // User-to-user block relationships (independent of any conversation).
+  blocks: defineTable({
+    blockerId: v.id("users"),
+    blockedId: v.id("users"),
+  })
+    .index("by_blocker_and_blocked", ["blockerId", "blockedId"])
+    .index("by_blocker", ["blockerId"])
+    .index("by_blocked", ["blockedId"]),
 });

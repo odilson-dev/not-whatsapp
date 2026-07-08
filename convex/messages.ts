@@ -1,9 +1,12 @@
-import { paginationOptsValidator } from "convex/server";
+import { paginationOptsValidator, paginationResultValidator } from "convex/server";
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { getCurrentUser } from "./lib/auth";
+import { getBlockStatus } from "./lib/blocks";
+import { upsertConversationState } from "./lib/conversationStates";
+import { getOtherMemberId } from "./lib/conversations";
 
 const messageValidator = v.object({
   _id: v.id("messages"),
@@ -41,11 +44,7 @@ export const list = query({
     conversationId: v.id("conversations"),
     paginationOpts: paginationOptsValidator,
   },
-  returns: v.object({
-    page: v.array(messageValidator),
-    isDone: v.boolean(),
-    continueCursor: v.union(v.string(), v.null()),
-  }),
+  returns: paginationResultValidator(messageValidator),
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
     await assertConversationMember(ctx, args.conversationId, user._id);
@@ -69,7 +68,24 @@ export const send = mutation({
   returns: v.id("messages"),
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
-    await assertConversationMember(ctx, args.conversationId, user._id);
+    const conversation = await assertConversationMember(
+      ctx,
+      args.conversationId,
+      user._id,
+    );
+
+    const otherUserId = getOtherMemberId(conversation, user._id);
+    const { iBlocked, blockedByThem } = await getBlockStatus(
+      ctx,
+      user._id,
+      otherUserId,
+    );
+    if (iBlocked) {
+      throw new Error("You blocked this contact. Unblock them to send messages.");
+    }
+    if (blockedByThem) {
+      throw new Error("You can't send messages to this contact.");
+    }
 
     let type: "text" | "image";
     let text: string | undefined;
@@ -108,6 +124,14 @@ export const send = mutation({
       lastMessageAt: createdAt,
       lastMessagePreview: type === "text" ? text : "Photo",
       lastMessageType: type,
+    });
+
+    // Keep the sender's own conversation marked as read and un-hide it if the
+    // sender had previously deleted the chat.
+    await upsertConversationState(ctx, user._id, args.conversationId, {
+      lastReadAt: createdAt,
+      manualUnread: false,
+      deletedAt: undefined,
     });
 
     return messageId;

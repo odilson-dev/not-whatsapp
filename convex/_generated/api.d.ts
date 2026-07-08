@@ -10,6 +10,8 @@
 
 import type * as conversations from "../conversations.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_blocks from "../lib/blocks.js";
+import type * as lib_conversationStates from "../lib/conversationStates.js";
 import type * as lib_conversations from "../lib/conversations.js";
 import type * as messages from "../messages.js";
 import type * as users from "../users.js";
@@ -23,6 +25,8 @@ import type {
 declare const fullApi: ApiFromModules<{
   conversations: typeof conversations;
   "lib/auth": typeof lib_auth;
+  "lib/blocks": typeof lib_blocks;
+  "lib/conversationStates": typeof lib_conversationStates;
   "lib/conversations": typeof lib_conversations;
   messages: typeof messages;
   users: typeof users;
