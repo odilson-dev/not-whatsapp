@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
+import { assertNotBanned } from "./lib/admin";
 import { getBlockRecord } from "./lib/blocks";
 import { getCurrentUser } from "./lib/auth";
 import {
@@ -278,6 +279,7 @@ export const getOrCreate = mutation({
   returns: v.id("conversations"),
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
+    assertNotBanned(user);
 
     if (args.otherUserId === user._id) {
       throw new Error("Cannot start a chat with yourself");
@@ -338,6 +340,7 @@ export const createGroup = mutation({
   returns: v.id("conversations"),
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
+    assertNotBanned(user);
 
     const name = args.name.trim();
     if (name.length === 0) {

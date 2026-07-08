@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
+import { assertNotBanned } from "./lib/admin";
 import { getCurrentUser } from "./lib/auth";
 import { getBlockStatus } from "./lib/blocks";
 import { upsertConversationState } from "./lib/conversationStates";
@@ -177,6 +178,7 @@ export const send = mutation({
   returns: v.id("messages"),
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
+    assertNotBanned(user);
     const conversation = await assertConversationMember(
       ctx,
       args.conversationId,
@@ -266,6 +268,7 @@ export const forward = mutation({
   returns: v.id("messages"),
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
+    assertNotBanned(user);
 
     const original = await ctx.db.get("messages", args.messageId);
     if (!original) {

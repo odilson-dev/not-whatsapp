@@ -24,11 +24,19 @@ export default defineSchema({
     email: v.optional(v.string()),
     profileImage: v.optional(v.string()),
     lastSeen: v.optional(v.number()),
+    // Platform-wide role. Treated as "user" when missing.
+    role: v.optional(v.union(v.literal("admin"), v.literal("user"))),
+    // Moderation state. A banned user is blocked from sending messages and
+    // creating conversations, and is shown a lockout screen in the app.
+    isBanned: v.optional(v.boolean()),
+    bannedAt: v.optional(v.number()),
+    banReason: v.optional(v.string()),
   })
     .index("by_tokenIdentifier", ["tokenIdentifier"])
     .index("user_id", ["userId"])
     .index("name", ["name"])
-    .index("email", ["email"]),
+    .index("email", ["email"])
+    .index("by_role", ["role"]),
 
   conversations: defineTable({
     // "direct" (1:1) or "group". Treated as "direct" when missing (legacy rows).

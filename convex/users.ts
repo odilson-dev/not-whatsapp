@@ -13,6 +13,10 @@ const userValidator = v.object({
   email: v.optional(v.string()),
   profileImage: v.optional(v.string()),
   lastSeen: v.optional(v.number()),
+  role: v.optional(v.union(v.literal("admin"), v.literal("user"))),
+  isBanned: v.optional(v.boolean()),
+  bannedAt: v.optional(v.number()),
+  banReason: v.optional(v.string()),
 });
 
 function profileFromIdentity(
