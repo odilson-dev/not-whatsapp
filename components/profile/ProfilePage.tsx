@@ -23,7 +23,7 @@ export function ProfilePage() {
 
   if (user === undefined) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#111B21] text-white">
+      <div className="flex min-h-screen items-center justify-center bg-[var(--background)] text-foreground">
         <Loader2 className="size-8 animate-spin text-[#00A884]" />
       </div>
     );
@@ -114,11 +114,11 @@ export function ProfilePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#111B21] text-white">
+    <div className="min-h-screen bg-[var(--background)] text-foreground">
       <header className="flex items-center gap-4 px-4 py-5">
         <Link
           href="/"
-          className="flex items-center gap-3 text-lg text-white/90 transition-colors hover:text-white"
+          className="flex items-center gap-3 text-lg text-foreground/90 transition-colors hover:text-foreground"
         >
           <ArrowLeft className="size-5" />
           <span>Profile</span>
@@ -127,7 +127,7 @@ export function ProfilePage() {
 
       <main className="mx-auto flex w-full max-w-lg flex-col items-center px-4 pb-10 pt-4">
         <div className="relative mb-10">
-          <div className="flex size-44 items-center justify-center overflow-hidden rounded-full bg-[#202c33] ring-1 ring-white/10">
+          <div className="flex size-44 items-center justify-center overflow-hidden rounded-full bg-[var(--card)] ring-1 ring-border">
             {user.profileImage ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -136,7 +136,7 @@ export function ProfilePage() {
                 className="size-full object-cover"
               />
             ) : (
-              <User className="size-20 text-white/30" />
+              <User className="size-20 text-foreground/30" />
             )}
             {isUploadingImage && (
               <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50">
@@ -185,7 +185,7 @@ export function ProfilePage() {
                 <input
                   value={nameDraft}
                   onChange={(event) => setNameDraft(event.target.value)}
-                  className="w-full rounded-lg border border-white/10 bg-[#111B21] px-3 py-2 text-lg text-white outline-none focus:border-[#00A884]"
+                  className="w-full rounded-lg border border-border bg-[var(--background)] px-3 py-2 text-lg text-foreground outline-none focus:border-[#00A884]"
                   autoFocus
                   disabled={isSavingName}
                   onKeyDown={(event) => {
@@ -213,7 +213,7 @@ export function ProfilePage() {
                   <Button
                     size="sm"
                     variant="outline"
-                    className="border-white/10 bg-transparent text-white hover:bg-white/5"
+                    className="border-border bg-transparent text-foreground hover:bg-accent"
                     onClick={cancelEditingName}
                     disabled={isSavingName}
                   >
@@ -222,19 +222,19 @@ export function ProfilePage() {
                 </div>
               </div>
             ) : (
-              <p className="text-lg text-white">{user.name}</p>
+              <p className="text-lg text-foreground">{user.name}</p>
             )}
           </ProfileField>
 
           <ProfileField label="E-mail">
-            <p className="text-lg text-white break-all">
+            <p className="text-lg text-foreground break-all">
               {user.email ?? "No email on file"}
             </p>
           </ProfileField>
         </div>
 
         {error && (
-          <p className="mt-6 w-full rounded-lg bg-red-500/10 px-4 py-3 text-sm text-red-300">
+          <p className="mt-6 w-full rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {error}
           </p>
         )}
@@ -255,12 +255,12 @@ function ProfileField({
   return (
     <section
       className={cn(
-        "rounded-2xl bg-[#202c33] px-5 py-4",
+        "rounded-2xl bg-[var(--card)] px-5 py-4",
         action && "flex items-start justify-between gap-4",
       )}
     >
       <div className="min-w-0 flex-1">
-        <p className="mb-2 text-sm text-white/50">{label}</p>
+        <p className="mb-2 text-sm text-foreground/50">{label}</p>
         {children}
       </div>
       {action}

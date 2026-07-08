@@ -1,5 +1,6 @@
 "use client";
 
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Fancybox } from "@/components/chat/Fancybox";
 import { UserAvatar } from "@/components/chat/UserAvatar";
 import { Button } from "@/components/ui/button";
@@ -330,17 +331,17 @@ export function ChatPage() {
 
   if (currentUser === undefined || conversations === undefined) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#111B21] text-white">
+      <div className="flex min-h-screen items-center justify-center bg-[var(--background)] text-foreground">
         <Loader2 className="size-8 animate-spin text-[#00A884]" />
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen bg-[#111B21] text-white">
+    <div className="flex h-screen bg-[var(--background)] text-foreground">
       <aside
         className={cn(
-          "flex w-full flex-col border-r border-white/10 bg-[#111B21] md:w-[420px] md:max-w-[40%]",
+          "flex w-full flex-col border-r border-border bg-[var(--background)] md:w-[420px] md:max-w-[40%]",
           selectedConversationId && "hidden md:flex",
         )}
       >
@@ -354,7 +355,7 @@ export function ChatPage() {
             <button
               type="button"
               onClick={() => setShowNewGroup(true)}
-              className="rounded-full p-2 text-white/80 transition-colors hover:bg-white/5 hover:text-white"
+              className="rounded-full p-2 text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
               aria-label="New group"
             >
               <Users className="size-5" />
@@ -362,14 +363,18 @@ export function ChatPage() {
             <button
               type="button"
               onClick={() => setShowNewChat(true)}
-              className="rounded-full p-2 text-white/80 transition-colors hover:bg-white/5 hover:text-white"
+              className="rounded-full p-2 text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
               aria-label="New chat"
             >
               <MessageSquare className="size-5" />
             </button>
+            <ThemeToggle
+              bare
+              className="rounded-full p-2 text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
+            />
             <Link
               href="/profile"
-              className="rounded-full p-2 text-white/80 transition-colors hover:bg-white/5 hover:text-white"
+              className="rounded-full p-2 text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
               aria-label="Profile"
             >
               <MoreVertical className="size-5" />
@@ -379,12 +384,12 @@ export function ChatPage() {
 
         <div className="px-3 pb-2">
           <label className="relative block">
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-white/40" />
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-foreground/40" />
             <input
               value={sidebarSearch}
               onChange={(event) => setSidebarSearch(event.target.value)}
               placeholder="Search"
-              className="w-full rounded-lg bg-[#202c33] py-2 pr-3 pl-10 text-sm text-white outline-none placeholder:text-white/40 focus:ring-1 focus:ring-[#00A884]/50"
+              className="w-full rounded-lg bg-[var(--card)] py-2 pr-3 pl-10 text-sm text-foreground outline-none placeholder:text-foreground/40 focus:ring-1 focus:ring-[#00A884]/50"
             />
           </label>
         </div>
@@ -421,7 +426,7 @@ export function ChatPage() {
           <button
             type="button"
             onClick={() => setShowArchived(false)}
-            className="flex items-center gap-3 border-b border-white/5 px-4 py-3 text-sm text-white/80 transition-colors hover:bg-[#202c33]"
+            className="flex items-center gap-3 border-b border-border px-4 py-3 text-sm text-foreground/80 transition-colors hover:bg-[var(--card)]"
           >
             <ArrowLeft className="size-4" />
             <span className="font-medium">Archived</span>
@@ -435,11 +440,11 @@ export function ChatPage() {
             <button
               type="button"
               onClick={() => setShowArchived(true)}
-              className="flex w-full items-center gap-3 border-b border-white/5 px-4 py-3 text-sm text-white/80 transition-colors hover:bg-[#202c33]"
+              className="flex w-full items-center gap-3 border-b border-border px-4 py-3 text-sm text-foreground/80 transition-colors hover:bg-[var(--card)]"
             >
               <Archive className="size-4 text-[#00A884]" />
               <span className="font-medium">Archived</span>
-              <span className="ml-auto text-xs text-white/45">
+              <span className="ml-auto text-xs text-foreground/45">
                 {archivedCount}
               </span>
             </button>
@@ -447,7 +452,7 @@ export function ChatPage() {
 
         <div className="flex-1 overflow-y-auto">
           {filteredConversations.length === 0 ? (
-            <div className="px-6 py-10 text-center text-sm text-white/50">
+            <div className="px-6 py-10 text-center text-sm text-foreground/50">
               {showArchived
                 ? "No archived chats."
                 : conversations.length === 0
@@ -546,12 +551,12 @@ function FilterChip({
         "rounded-full px-3 py-1 text-sm font-medium transition-colors",
         active
           ? "bg-[#00A884]/20 text-[#00A884]"
-          : "bg-[#202c33] text-white/60 hover:bg-[#2a3942] hover:text-white/80",
+          : "bg-[var(--card)] text-foreground/60 hover:bg-[var(--muted)] hover:text-foreground/80",
       )}
     >
       {label}
       {count !== undefined && count > 0 && (
-        <span className={cn("ml-1", active ? "text-[#00A884]" : "text-white/40")}>
+        <span className={cn("ml-1", active ? "text-[#00A884]" : "text-foreground/40")}>
           {count}
         </span>
       )}
@@ -583,8 +588,8 @@ function ConversationListItem({
         }
       }}
       className={cn(
-        "group/row flex w-full cursor-pointer items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-[#202c33]",
-        isSelected && "bg-[#2a3942]",
+        "group/row flex w-full cursor-pointer items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-[var(--card)]",
+        isSelected && "bg-[var(--muted)]",
       )}
     >
       <UserAvatar
@@ -598,7 +603,7 @@ function ConversationListItem({
         <div className="flex items-center justify-between gap-2">
           <p
             className={cn(
-              "truncate font-medium text-white",
+              "truncate font-medium text-foreground",
               conversation.unread && "font-semibold",
             )}
           >
@@ -606,21 +611,21 @@ function ConversationListItem({
           </p>
           <span
             className={cn(
-              "shrink-0 text-xs text-white/45",
+              "shrink-0 text-xs text-foreground/45",
               conversation.unread && "text-[#00A884]",
             )}
           >
             {formatConversationTime(conversation.lastMessageAt)}
           </span>
         </div>
-        <div className="mt-1 flex items-center gap-1 text-sm text-white/50">
+        <div className="mt-1 flex items-center gap-1 text-sm text-foreground/50">
           {conversation.lastMessageType === "image" && (
             <Camera className="size-3.5 shrink-0" />
           )}
           <p
             className={cn(
               "truncate",
-              conversation.unread && "font-medium text-white/80",
+              conversation.unread && "font-medium text-foreground/80",
             )}
           >
             {conversation.lastMessagePreview ??
@@ -628,13 +633,13 @@ function ConversationListItem({
           </p>
           <span className="ml-auto flex shrink-0 items-center gap-1.5 pl-1">
             {conversation.isBlocked && (
-              <Ban className="size-3.5 text-red-400/70" />
+              <Ban className="size-3.5 text-destructive/70" />
             )}
             {conversation.isFavorite && (
               <Star className="size-3.5 fill-[#00A884] text-[#00A884]" />
             )}
             {conversation.isPinned && (
-              <Pin className="size-3.5 text-white/45" />
+              <Pin className="size-3.5 text-foreground/45" />
             )}
             {conversation.unread && (
               <span className="size-2.5 rounded-full bg-[#00A884]" />
@@ -648,7 +653,7 @@ function ConversationListItem({
           conversation={conversation}
           align="start"
           side="bottom"
-          triggerClassName="rounded-full p-1.5 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+          triggerClassName="rounded-full p-1.5 text-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
         />
       </div>
     </div>
@@ -776,12 +781,12 @@ function ConversationActionsMenu({
 
 function EmptyChatState() {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center bg-[#222e35] text-center">
-      <div className="mb-6 rounded-full bg-[#202c33] p-8">
-        <MessageSquare className="size-16 text-white/20" />
+    <div className="flex flex-1 flex-col items-center justify-center bg-[var(--card)] text-center">
+      <div className="mb-6 rounded-full bg-[var(--card)] p-8">
+        <MessageSquare className="size-16 text-foreground/20" />
       </div>
-      <h2 className="text-2xl font-light text-white/90">Not Whatsapp Web</h2>
-      <p className="mt-3 max-w-sm text-sm text-white/50">
+      <h2 className="text-2xl font-light text-foreground/90">Not Whatsapp Web</h2>
+      <p className="mt-3 max-w-sm text-sm text-foreground/50">
         Select a chat from the sidebar to start messaging.
       </p>
     </div>
@@ -805,13 +810,13 @@ function NewChatDialog({
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-4 pt-16">
-      <div className="w-full max-w-md overflow-hidden rounded-xl bg-[#111B21] shadow-2xl ring-1 ring-white/10">
-        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+      <div className="w-full max-w-md overflow-hidden rounded-xl bg-[var(--background)] shadow-2xl ring-1 ring-border">
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <h2 className="text-lg font-medium">New chat</h2>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full p-1 text-white/70 hover:bg-white/5 hover:text-white"
+            className="rounded-full p-1 text-foreground/70 hover:bg-accent hover:text-foreground"
             aria-label="Close"
           >
             <X className="size-5" />
@@ -820,20 +825,20 @@ function NewChatDialog({
 
         <div className="p-4">
           <label className="relative block">
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-white/40" />
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-foreground/40" />
             <input
               value={query}
               onChange={(event) => onQueryChange(event.target.value)}
               placeholder="Search users by name or email"
               autoFocus
-              className="w-full rounded-lg bg-[#202c33] py-2.5 pr-3 pl-10 text-sm text-white outline-none placeholder:text-white/40 focus:ring-1 focus:ring-[#00A884]/50"
+              className="w-full rounded-lg bg-[var(--card)] py-2.5 pr-3 pl-10 text-sm text-foreground outline-none placeholder:text-foreground/40 focus:ring-1 focus:ring-[#00A884]/50"
             />
           </label>
         </div>
 
-        <div className="max-h-80 overflow-y-auto border-t border-white/10">
+        <div className="max-h-80 overflow-y-auto border-t border-border">
           {query.trim().length === 0 ? (
-            <p className="px-4 py-6 text-sm text-white/50">
+            <p className="px-4 py-6 text-sm text-foreground/50">
               Type to find someone to chat with.
             </p>
           ) : results === undefined ? (
@@ -841,7 +846,7 @@ function NewChatDialog({
               <Loader2 className="size-6 animate-spin text-[#00A884]" />
             </div>
           ) : results.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-white/50">No users found.</p>
+            <p className="px-4 py-6 text-sm text-foreground/50">No users found.</p>
           ) : (
             results.map((user) => (
               <button
@@ -849,7 +854,7 @@ function NewChatDialog({
                 type="button"
                 disabled={isLoading}
                 onClick={() => onSelectUser(user._id)}
-                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[#202c33] disabled:opacity-60"
+                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--card)] disabled:opacity-60"
               >
                 <UserAvatar
                   name={user.name}
@@ -859,7 +864,7 @@ function NewChatDialog({
                 <div className="min-w-0">
                   <p className="truncate font-medium">{user.name}</p>
                   {user.email && (
-                    <p className="truncate text-sm text-white/50">
+                    <p className="truncate text-sm text-foreground/50">
                       {user.email}
                     </p>
                   )}
@@ -932,13 +937,13 @@ function NewGroupDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-4 pt-16">
-      <div className="flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-xl bg-[#111B21] shadow-2xl ring-1 ring-white/10">
-        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+      <div className="flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-xl bg-[var(--background)] shadow-2xl ring-1 ring-border">
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <h2 className="text-lg font-medium">New group</h2>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full p-1 text-white/70 hover:bg-white/5 hover:text-white"
+            className="rounded-full p-1 text-foreground/70 hover:bg-accent hover:text-foreground"
             aria-label="Close"
           >
             <X className="size-5" />
@@ -951,7 +956,7 @@ function NewGroupDialog({
             onChange={(event) => setName(event.target.value)}
             placeholder="Group name"
             autoFocus
-            className="w-full rounded-lg bg-[#202c33] px-4 py-2.5 text-sm text-white outline-none placeholder:text-white/40 focus:ring-1 focus:ring-[#00A884]/50"
+            className="w-full rounded-lg bg-[var(--card)] px-4 py-2.5 text-sm text-foreground outline-none placeholder:text-foreground/40 focus:ring-1 focus:ring-[#00A884]/50"
           />
 
           {selected.length > 0 && (
@@ -959,13 +964,13 @@ function NewGroupDialog({
               {selected.map((user) => (
                 <span
                   key={user._id}
-                  className="flex items-center gap-1 rounded-full bg-[#2a3942] py-1 pr-1 pl-3 text-xs text-white"
+                  className="flex items-center gap-1 rounded-full bg-[var(--muted)] py-1 pr-1 pl-3 text-xs text-foreground"
                 >
                   {user.name}
                   <button
                     type="button"
                     onClick={() => toggleUser(user)}
-                    className="rounded-full p-0.5 text-white/60 hover:bg-white/10 hover:text-white"
+                    className="rounded-full p-0.5 text-foreground/60 hover:bg-accent hover:text-foreground"
                     aria-label={`Remove ${user.name}`}
                   >
                     <X className="size-3" />
@@ -976,19 +981,19 @@ function NewGroupDialog({
           )}
 
           <label className="relative block">
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-white/40" />
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-foreground/40" />
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Add members by name or email"
-              className="w-full rounded-lg bg-[#202c33] py-2.5 pr-3 pl-10 text-sm text-white outline-none placeholder:text-white/40 focus:ring-1 focus:ring-[#00A884]/50"
+              className="w-full rounded-lg bg-[var(--card)] py-2.5 pr-3 pl-10 text-sm text-foreground outline-none placeholder:text-foreground/40 focus:ring-1 focus:ring-[#00A884]/50"
             />
           </label>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto border-t border-white/10">
+        <div className="min-h-0 flex-1 overflow-y-auto border-t border-border">
           {query.trim().length === 0 ? (
-            <p className="px-4 py-6 text-sm text-white/50">
+            <p className="px-4 py-6 text-sm text-foreground/50">
               Search for people to add to the group.
             </p>
           ) : results === undefined ? (
@@ -996,7 +1001,7 @@ function NewGroupDialog({
               <Loader2 className="size-6 animate-spin text-[#00A884]" />
             </div>
           ) : results.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-white/50">No users found.</p>
+            <p className="px-4 py-6 text-sm text-foreground/50">No users found.</p>
           ) : (
             results.map((user) => {
               const isSelected = selected.some((u) => u._id === user._id);
@@ -1005,7 +1010,7 @@ function NewGroupDialog({
                   key={user._id}
                   type="button"
                   onClick={() => toggleUser(user)}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[#202c33]"
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--card)]"
                 >
                   <UserAvatar
                     name={user.name}
@@ -1015,7 +1020,7 @@ function NewGroupDialog({
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">{user.name}</p>
                     {user.email && (
-                      <p className="truncate text-sm text-white/50">
+                      <p className="truncate text-sm text-foreground/50">
                         {user.email}
                       </p>
                     )}
@@ -1025,7 +1030,7 @@ function NewGroupDialog({
                       "flex size-5 shrink-0 items-center justify-center rounded-full border",
                       isSelected
                         ? "border-[#00A884] bg-[#00A884] text-white"
-                        : "border-white/30",
+                        : "border-border",
                     )}
                   >
                     {isSelected && <Check className="size-3.5" />}
@@ -1036,11 +1041,11 @@ function NewGroupDialog({
           )}
         </div>
 
-        <div className="flex items-center justify-between gap-3 border-t border-white/10 px-4 py-3">
+        <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-3">
           {error ? (
-            <p className="text-sm text-red-300">{error}</p>
+            <p className="text-sm text-destructive">{error}</p>
           ) : (
-            <p className="text-sm text-white/40">
+            <p className="text-sm text-foreground/40">
               {selected.length} selected
             </p>
           )}
@@ -1348,16 +1353,16 @@ function MessagePanel({
       <div className="flex h-full min-h-0 flex-1">
         <div
           className={cn(
-            "flex h-full min-h-0 flex-1 flex-col bg-[#0b141a]",
+            "flex h-full min-h-0 flex-1 flex-col bg-[var(--background)]",
             showContactInfo && "hidden md:flex",
           )}
         >
-        <header className="flex items-center gap-3 border-b border-white/10 bg-[#202c33] px-4 py-3">
+        <header className="flex items-center gap-3 border-b border-border bg-[var(--card)] px-4 py-3">
           {onBack && (
             <Button
               variant="ghost"
               size="icon-sm"
-              className="text-white hover:bg-white/10"
+              className="text-foreground hover:bg-accent"
               onClick={onBack}
             >
               ←
@@ -1375,24 +1380,24 @@ function MessagePanel({
               className="size-10"
               group={isGroup}
               online={isGroup ? undefined : presence === "online"}
-              statusClassName="border-[#202c33]"
+              statusClassName="border-[var(--card)]"
             />
             <div className="min-w-0 flex-1">
               <p className="truncate font-medium">{conversation.title}</p>
               {isGroup ? (
-                <p className="truncate text-xs text-white/50">{groupSubtitle}</p>
+                <p className="truncate text-xs text-foreground/50">{groupSubtitle}</p>
               ) : presence ? (
                 <p
                   className={cn(
                     "truncate text-xs",
-                    presence === "online" ? "text-[#00A884]" : "text-white/50",
+                    presence === "online" ? "text-[#00A884]" : "text-foreground/50",
                   )}
                 >
                   {presence}
                 </p>
               ) : (
                 otherUser?.email && (
-                  <p className="truncate text-xs text-white/50">
+                  <p className="truncate text-xs text-foreground/50">
                     {otherUser.email}
                   </p>
                 )
@@ -1403,7 +1408,7 @@ function MessagePanel({
             conversation={conversation}
             align="end"
             side="bottom"
-            triggerClassName="rounded-full p-2 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+            triggerClassName="rounded-full p-2 text-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
             onDeleted={onDeleted}
           />
         </header>
@@ -1421,7 +1426,7 @@ function MessagePanel({
               <Button
                 variant="outline"
                 size="sm"
-                className="border-white/10 bg-transparent text-white hover:bg-white/5"
+                className="border-border bg-transparent text-foreground hover:bg-accent"
                 onClick={() => loadMore(30)}
               >
                 Load older messages
@@ -1475,14 +1480,14 @@ function MessagePanel({
         {isBlocked && otherUser ? (
           <BlockedComposer otherUserId={otherUser._id} />
         ) : (
-          <footer className="border-t border-white/10 bg-[#202c33] px-4 py-3">
+          <footer className="border-t border-border bg-[var(--card)] px-4 py-3">
             {replyTarget && (
-              <div className="mb-2 flex items-center gap-2 rounded-lg bg-[#111B21] px-3 py-2">
+              <div className="mb-2 flex items-center gap-2 rounded-lg bg-[var(--background)] px-3 py-2">
                 <div className="min-w-0 flex-1 border-l-2 border-[#00A884] pl-2">
                   <p className="text-xs font-medium text-[#00A884]">
                     {replyLabel(replyTarget)}
                   </p>
-                  <p className="truncate text-sm text-white/60">
+                  <p className="truncate text-sm text-foreground/60">
                     {replyTarget.type === "image"
                       ? "Photo"
                       : (replyTarget.text ?? "")}
@@ -1491,7 +1496,7 @@ function MessagePanel({
                 <button
                   type="button"
                   onClick={() => setReplyTarget(null)}
-                  className="rounded-full p-1 text-white/60 hover:bg-white/10 hover:text-white"
+                  className="rounded-full p-1 text-foreground/60 hover:bg-accent hover:text-foreground"
                   aria-label="Cancel reply"
                 >
                   <X className="size-4" />
@@ -1500,21 +1505,21 @@ function MessagePanel({
             )}
             <div className="relative flex items-end gap-2">
               {isGroup && mentionQuery !== null && mentionMatches.length > 0 && (
-                <div className="absolute bottom-full left-10 mb-2 max-h-56 w-64 overflow-y-auto rounded-lg bg-[#233138] py-1 shadow-2xl ring-1 ring-white/10">
+                <div className="absolute bottom-full left-10 mb-2 max-h-56 w-64 overflow-y-auto rounded-lg bg-[var(--card)] py-1 shadow-2xl ring-1 ring-border">
                   {mentionMatches.map((member) => (
                     <button
                       key={member._id}
                       type="button"
                       onMouseDown={(event) => event.preventDefault()}
                       onClick={() => insertMention(member)}
-                      className="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-white/5"
+                      className="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-accent"
                     >
                       <UserAvatar
                         name={member.name}
                         imageUrl={member.profileImage}
                         className="size-8"
                       />
-                      <span className="min-w-0 flex-1 truncate text-sm text-white">
+                      <span className="min-w-0 flex-1 truncate text-sm text-foreground">
                         {member.name}
                       </span>
                       {member.role === "admin" && (
@@ -1528,7 +1533,7 @@ function MessagePanel({
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isUploadingImage || isSending}
-                className="rounded-full p-2 text-white/70 transition-colors hover:bg-white/5 hover:text-white disabled:opacity-50"
+                className="rounded-full p-2 text-foreground/70 transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
                 aria-label="Attach image"
               >
                 {isUploadingImage ? (
@@ -1551,7 +1556,7 @@ function MessagePanel({
                 onBlur={() => setMentionQuery(null)}
                 placeholder="Type a message"
                 rows={1}
-                className="max-h-32 min-h-10 flex-1 resize-none rounded-lg bg-[#2a3942] px-4 py-2.5 text-sm text-white outline-none placeholder:text-white/40 focus:ring-1 focus:ring-[#00A884]/40"
+                className="max-h-32 min-h-10 flex-1 resize-none rounded-lg bg-[var(--muted)] px-4 py-2.5 text-sm text-foreground outline-none placeholder:text-foreground/40 focus:ring-1 focus:ring-[#00A884]/40"
                 onKeyDown={(event) => {
                   if (event.key === "Escape" && mentionQuery !== null) {
                     setMentionQuery(null);
@@ -1576,7 +1581,7 @@ function MessagePanel({
                 Send
               </Button>
             </div>
-            {error && <p className="mt-2 text-sm text-red-300">{error}</p>}
+            {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
           </footer>
         )}
       </div>
@@ -1605,7 +1610,7 @@ function MessagePanel({
 function DaySeparator({ label }: { label: string }) {
   return (
     <div className="flex justify-center py-2">
-      <span className="rounded-lg bg-[#182229] px-3 py-1 text-xs font-medium text-white/60 shadow-sm">
+      <span className="rounded-lg bg-[var(--card)] px-3 py-1 text-xs font-medium text-foreground/60 shadow-sm">
         {label}
       </span>
     </div>
@@ -1615,7 +1620,7 @@ function DaySeparator({ label }: { label: string }) {
 function SystemMessage({ text }: { text: string }) {
   return (
     <div className="flex justify-center py-1">
-      <span className="max-w-[85%] rounded-lg bg-[#182229] px-3 py-1.5 text-center text-xs text-white/70 shadow-sm">
+      <span className="max-w-[85%] rounded-lg bg-[var(--card)] px-3 py-1.5 text-center text-xs text-foreground/70 shadow-sm">
         {text}
       </span>
     </div>
@@ -1624,13 +1629,13 @@ function SystemMessage({ text }: { text: string }) {
 
 function MessageReceiptTicks({ receipt }: { receipt: MessageReceipt }) {
   if (receipt === "sent") {
-    return <Check className="size-3.5 text-white/50" />;
+    return <Check className="size-3.5 text-foreground/50" />;
   }
   return (
     <CheckCheck
       className={cn(
         "size-3.5",
-        receipt === "read" ? "text-[#53bdeb]" : "text-white/50",
+        receipt === "read" ? "text-[#53bdeb]" : "text-foreground/50",
       )}
     />
   );
@@ -1682,8 +1687,8 @@ function MessageRow({
         className={cn(
           "group/msg relative max-w-[75%] rounded-lg px-3 py-2 shadow-sm",
           isOwn
-            ? "rounded-tr-none bg-[#005c4b]"
-            : "rounded-tl-none bg-[#202c33]",
+            ? "rounded-tr-none bg-[var(--bubble-out)]"
+            : "rounded-tl-none bg-[var(--card)]",
           message.type === "image" && "p-1",
         )}
       >
@@ -1733,7 +1738,7 @@ function MessageRow({
         )}
 
         {message.forwarded && (
-          <p className="mb-0.5 flex items-center gap-1 text-xs italic text-white/40">
+          <p className="mb-0.5 flex items-center gap-1 text-xs italic text-foreground/40">
             <Forward className="size-3" />
             Forwarded
           </p>
@@ -1742,12 +1747,11 @@ function MessageRow({
         {message.replyTo && (
           <div
             className={cn(
-              "mb-1 rounded border-l-2 border-[#00A884] px-2 py-1 text-xs",
-              isOwn ? "bg-black/20" : "bg-black/25",
+              "mb-1 rounded border-l-2 border-[#00A884] bg-foreground/5 px-2 py-1 text-xs",
             )}
           >
             <p className="font-medium text-[#00A884]">{replyLabel}</p>
-            <p className="truncate text-white/60">
+            <p className="truncate text-foreground/60">
               {message.replyTo.type === "image"
                 ? "Photo"
                 : (message.replyTo.text ?? "")}
@@ -1756,7 +1760,7 @@ function MessageRow({
         )}
 
         {message.type === "text" ? (
-          <p className="whitespace-pre-wrap wrap-break-word pr-5 text-[15px] text-white">
+          <p className="whitespace-pre-wrap wrap-break-word pr-5 text-[15px] text-foreground">
             {renderTextWithMentions(message.text ?? "", mentionNames).map(
               (part, index) =>
                 typeof part === "string" ? (
@@ -1789,7 +1793,7 @@ function MessageRow({
         )}
         <div
           className={cn(
-            "mt-1 flex items-center gap-1 text-[11px] text-white/50",
+            "mt-1 flex items-center gap-1 text-[11px] text-foreground/50",
             isOwn ? "justify-end" : "justify-start",
           )}
         >
@@ -1848,13 +1852,13 @@ function ForwardDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-4 pt-16">
-      <div className="w-full max-w-md overflow-hidden rounded-xl bg-[#111B21] shadow-2xl ring-1 ring-white/10">
-        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-          <h2 className="text-lg font-medium text-white">Forward message to</h2>
+      <div className="w-full max-w-md overflow-hidden rounded-xl bg-[var(--background)] shadow-2xl ring-1 ring-border">
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          <h2 className="text-lg font-medium text-foreground">Forward message to</h2>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full p-1 text-white/70 hover:bg-white/5 hover:text-white"
+            className="rounded-full p-1 text-foreground/70 hover:bg-accent hover:text-foreground"
             aria-label="Close"
           >
             <X className="size-5" />
@@ -1863,24 +1867,24 @@ function ForwardDialog({
 
         <div className="p-4">
           <label className="relative block">
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-white/40" />
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-foreground/40" />
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search chats"
               autoFocus
-              className="w-full rounded-lg bg-[#202c33] py-2.5 pr-3 pl-10 text-sm text-white outline-none placeholder:text-white/40 focus:ring-1 focus:ring-[#00A884]/50"
+              className="w-full rounded-lg bg-[var(--card)] py-2.5 pr-3 pl-10 text-sm text-foreground outline-none placeholder:text-foreground/40 focus:ring-1 focus:ring-[#00A884]/50"
             />
           </label>
         </div>
 
-        <div className="max-h-80 overflow-y-auto border-t border-white/10">
+        <div className="max-h-80 overflow-y-auto border-t border-border">
           {conversations === undefined ? (
             <div className="flex justify-center py-8">
               <Loader2 className="size-6 animate-spin text-[#00A884]" />
             </div>
           ) : targets.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-white/50">No chats found.</p>
+            <p className="px-4 py-6 text-sm text-foreground/50">No chats found.</p>
           ) : (
             targets.map((conversation) => (
               <button
@@ -1888,7 +1892,7 @@ function ForwardDialog({
                 type="button"
                 disabled={forwardingTo !== null}
                 onClick={() => void handleForward(conversation._id)}
-                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[#202c33] disabled:opacity-60"
+                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--card)] disabled:opacity-60"
               >
                 <UserAvatar
                   name={conversation.title}
@@ -1896,7 +1900,7 @@ function ForwardDialog({
                   className="size-10"
                   group={conversation.kind === "group"}
                 />
-                <p className="min-w-0 flex-1 truncate font-medium text-white">
+                <p className="min-w-0 flex-1 truncate font-medium text-foreground">
                   {conversation.title}
                 </p>
                 {forwardingTo === conversation._id && (
@@ -1906,7 +1910,7 @@ function ForwardDialog({
             ))
           )}
         </div>
-        {error && <p className="px-4 py-2 text-sm text-red-300">{error}</p>}
+        {error && <p className="px-4 py-2 text-sm text-destructive">{error}</p>}
       </div>
     </div>
   );
@@ -2005,12 +2009,12 @@ function ContactInfoPanel({
   };
 
   return (
-    <aside className="flex h-full w-full min-w-0 flex-col border-l border-white/10 bg-[#111B21] md:w-[380px] md:shrink-0">
-      <header className="flex items-center gap-4 border-b border-white/10 bg-[#202c33] px-4 py-3">
+    <aside className="flex h-full w-full min-w-0 flex-col border-l border-border bg-[var(--background)] md:w-[380px] md:shrink-0">
+      <header className="flex items-center gap-4 border-b border-border bg-[var(--card)] px-4 py-3">
         <button
           type="button"
           onClick={onClose}
-          className="rounded-full p-1.5 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+          className="rounded-full p-1.5 text-foreground/70 transition-colors hover:bg-accent hover:text-foreground"
           aria-label="Close contact info"
         >
           <X className="size-5" />
@@ -2019,7 +2023,7 @@ function ContactInfoPanel({
       </header>
 
       <div className="flex-1 overflow-y-auto">
-        <div className="flex flex-col items-center gap-3 bg-[#111B21] px-6 py-8 text-center">
+        <div className="flex flex-col items-center gap-3 bg-[var(--background)] px-6 py-8 text-center">
           <div className="relative">
             <UserAvatar
               name={conversation.title}
@@ -2027,7 +2031,7 @@ function ContactInfoPanel({
               className="size-40"
               group={isGroup}
               online={isGroup ? undefined : presence === "online"}
-              statusClassName="size-6 border-4 border-[#111B21]"
+              statusClassName="size-6 border-4 border-[var(--background)]"
             />
             {isGroup && iAmAdmin && (
               <button
@@ -2059,7 +2063,7 @@ function ContactInfoPanel({
                 value={nameDraft}
                 onChange={(event) => setNameDraft(event.target.value)}
                 autoFocus
-                className="min-w-0 flex-1 rounded-lg bg-[#202c33] px-3 py-2 text-center text-lg text-white outline-none focus:ring-1 focus:ring-[#00A884]/50"
+                className="min-w-0 flex-1 rounded-lg bg-[var(--card)] px-3 py-2 text-center text-lg text-foreground outline-none focus:ring-1 focus:ring-[#00A884]/50"
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
                     void handleSaveName();
@@ -2073,7 +2077,7 @@ function ContactInfoPanel({
               <button
                 type="button"
                 onClick={() => void handleSaveName()}
-                className="rounded-full p-2 text-[#00A884] hover:bg-white/5"
+                className="rounded-full p-2 text-[#00A884] hover:bg-accent"
                 aria-label="Save name"
               >
                 <Check className="size-5" />
@@ -2081,7 +2085,7 @@ function ContactInfoPanel({
             </div>
           ) : (
             <div className="mt-2 flex items-center gap-2">
-              <h2 className="text-xl font-medium text-white">
+              <h2 className="text-xl font-medium text-foreground">
                 {conversation.title}
               </h2>
               {isGroup && iAmAdmin && (
@@ -2091,7 +2095,7 @@ function ContactInfoPanel({
                     setNameDraft(conversation.title);
                     setIsEditingName(true);
                   }}
-                  className="rounded-full p-1.5 text-white/60 hover:bg-white/5 hover:text-white"
+                  className="rounded-full p-1.5 text-foreground/60 hover:bg-accent hover:text-foreground"
                   aria-label="Edit group name"
                 >
                   <Pencil className="size-4" />
@@ -2101,19 +2105,19 @@ function ContactInfoPanel({
           )}
 
           {isGroup ? (
-            <p className="text-sm text-white/50">
+            <p className="text-sm text-foreground/50">
               Group · {conversation.memberCount} members
             </p>
           ) : (
             <>
               {otherUser?.email && (
-                <p className="text-sm text-white/50">{otherUser.email}</p>
+                <p className="text-sm text-foreground/50">{otherUser.email}</p>
               )}
               {presence && (
                 <p
                   className={cn(
                     "text-sm",
-                    presence === "online" ? "text-[#00A884]" : "text-white/50",
+                    presence === "online" ? "text-[#00A884]" : "text-foreground/50",
                   )}
                 >
                   {presence}
@@ -2122,21 +2126,21 @@ function ContactInfoPanel({
             </>
           )}
           {actionError && (
-            <p className="text-sm text-red-300">{actionError}</p>
+            <p className="text-sm text-destructive">{actionError}</p>
           )}
         </div>
 
         {isGroup && (
-          <div className="mt-2 bg-[#111B21] px-4 py-4">
+          <div className="mt-2 bg-[var(--background)] px-4 py-4">
             <div className="mb-3 flex items-center justify-between">
-              <p className="text-sm text-white/60">
+              <p className="text-sm text-foreground/60">
                 {conversation.memberCount} members
               </p>
               {iAmAdmin && (
                 <button
                   type="button"
                   onClick={() => setShowAddMembers(true)}
-                  className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm text-[#00A884] transition-colors hover:bg-white/5"
+                  className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm text-[#00A884] transition-colors hover:bg-accent"
                 >
                   <UserPlus className="size-4" />
                   Add
@@ -2154,7 +2158,7 @@ function ContactInfoPanel({
                   return (
                     <div
                       key={member._id}
-                      className="group/member flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-[#202c33]"
+                      className="group/member flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-[var(--card)]"
                     >
                       <UserAvatar
                         name={member.name}
@@ -2162,11 +2166,11 @@ function ContactInfoPanel({
                         className="size-10"
                       />
                       <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium text-white">
+                        <p className="truncate font-medium text-foreground">
                           {isSelf ? "You" : member.name}
                         </p>
                         {member.email && (
-                          <p className="truncate text-sm text-white/50">
+                          <p className="truncate text-sm text-foreground/50">
                             {member.email}
                           </p>
                         )}
@@ -2181,7 +2185,7 @@ function ContactInfoPanel({
                         <DropdownMenu>
                           <DropdownMenuTrigger
                             aria-label={`Manage ${member.name}`}
-                            className="rounded-full p-1.5 text-white/60 opacity-0 transition-opacity hover:bg-white/10 hover:text-white group-hover/member:opacity-100 focus:opacity-100"
+                            className="rounded-full p-1.5 text-foreground/60 opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover/member:opacity-100 focus:opacity-100"
                           >
                             <MoreVertical className="size-4" />
                           </DropdownMenuTrigger>
@@ -2240,14 +2244,14 @@ function ContactInfoPanel({
           </div>
         )}
 
-        <div className="mt-2 bg-[#111B21] px-4 py-4">
-          <p className="mb-3 text-sm text-white/60">Shared media</p>
+        <div className="mt-2 bg-[var(--background)] px-4 py-4">
+          <p className="mb-3 text-sm text-foreground/60">Shared media</p>
           {images === undefined ? (
             <div className="flex justify-center py-8">
               <Loader2 className="size-6 animate-spin text-[#00A884]" />
             </div>
           ) : images.length === 0 ? (
-            <p className="py-6 text-center text-sm text-white/40">
+            <p className="py-6 text-center text-sm text-foreground/40">
               No media shared yet.
             </p>
           ) : (
@@ -2257,7 +2261,7 @@ function ContactInfoPanel({
                   key={image._id}
                   href={image.imageUrl}
                   data-fancybox={`media-${conversationId}`}
-                  className="aspect-square cursor-pointer overflow-hidden rounded-md bg-[#202c33]"
+                  className="aspect-square cursor-pointer overflow-hidden rounded-md bg-[var(--card)]"
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
@@ -2338,13 +2342,13 @@ function AddMembersDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-4 pt-16">
-      <div className="flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-xl bg-[#111B21] shadow-2xl ring-1 ring-white/10">
-        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+      <div className="flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-xl bg-[var(--background)] shadow-2xl ring-1 ring-border">
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <h2 className="text-lg font-medium">Add members</h2>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full p-1 text-white/70 hover:bg-white/5 hover:text-white"
+            className="rounded-full p-1 text-foreground/70 hover:bg-accent hover:text-foreground"
             aria-label="Close"
           >
             <X className="size-5" />
@@ -2357,13 +2361,13 @@ function AddMembersDialog({
               {selected.map((user) => (
                 <span
                   key={user._id}
-                  className="flex items-center gap-1 rounded-full bg-[#2a3942] py-1 pr-1 pl-3 text-xs text-white"
+                  className="flex items-center gap-1 rounded-full bg-[var(--muted)] py-1 pr-1 pl-3 text-xs text-foreground"
                 >
                   {user.name}
                   <button
                     type="button"
                     onClick={() => toggleUser(user)}
-                    className="rounded-full p-0.5 text-white/60 hover:bg-white/10 hover:text-white"
+                    className="rounded-full p-0.5 text-foreground/60 hover:bg-accent hover:text-foreground"
                     aria-label={`Remove ${user.name}`}
                   >
                     <X className="size-3" />
@@ -2373,20 +2377,20 @@ function AddMembersDialog({
             </div>
           )}
           <label className="relative block">
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-white/40" />
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-foreground/40" />
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search users by name or email"
               autoFocus
-              className="w-full rounded-lg bg-[#202c33] py-2.5 pr-3 pl-10 text-sm text-white outline-none placeholder:text-white/40 focus:ring-1 focus:ring-[#00A884]/50"
+              className="w-full rounded-lg bg-[var(--card)] py-2.5 pr-3 pl-10 text-sm text-foreground outline-none placeholder:text-foreground/40 focus:ring-1 focus:ring-[#00A884]/50"
             />
           </label>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto border-t border-white/10">
+        <div className="min-h-0 flex-1 overflow-y-auto border-t border-border">
           {query.trim().length === 0 ? (
-            <p className="px-4 py-6 text-sm text-white/50">
+            <p className="px-4 py-6 text-sm text-foreground/50">
               Search for people to add.
             </p>
           ) : results === undefined ? (
@@ -2394,7 +2398,7 @@ function AddMembersDialog({
               <Loader2 className="size-6 animate-spin text-[#00A884]" />
             </div>
           ) : results.filter((u) => !existing.has(u._id)).length === 0 ? (
-            <p className="px-4 py-6 text-sm text-white/50">No users found.</p>
+            <p className="px-4 py-6 text-sm text-foreground/50">No users found.</p>
           ) : (
             results
               .filter((u) => !existing.has(u._id))
@@ -2405,7 +2409,7 @@ function AddMembersDialog({
                     key={user._id}
                     type="button"
                     onClick={() => toggleUser(user)}
-                    className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[#202c33]"
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--card)]"
                   >
                     <UserAvatar
                       name={user.name}
@@ -2415,7 +2419,7 @@ function AddMembersDialog({
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium">{user.name}</p>
                       {user.email && (
-                        <p className="truncate text-sm text-white/50">
+                        <p className="truncate text-sm text-foreground/50">
                           {user.email}
                         </p>
                       )}
@@ -2425,7 +2429,7 @@ function AddMembersDialog({
                         "flex size-5 shrink-0 items-center justify-center rounded-full border",
                         isSelected
                           ? "border-[#00A884] bg-[#00A884] text-white"
-                          : "border-white/30",
+                          : "border-border",
                       )}
                     >
                       {isSelected && <Check className="size-3.5" />}
@@ -2436,8 +2440,8 @@ function AddMembersDialog({
           )}
         </div>
 
-        <div className="flex items-center justify-between gap-3 border-t border-white/10 px-4 py-3">
-          <p className="text-sm text-white/40">{selected.length} selected</p>
+        <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-3">
+          <p className="text-sm text-foreground/40">{selected.length} selected</p>
           <Button
             className="bg-[#00A884] text-white hover:bg-[#06cf9c]"
             onClick={() => void handleAdd()}
@@ -2455,8 +2459,8 @@ function BlockedComposer({ otherUserId }: { otherUserId: Id<"users"> }) {
   const setBlocked = useMutation(api.conversations.setBlocked);
 
   return (
-    <footer className="flex flex-col items-center gap-2 border-t border-white/10 bg-[#202c33] px-4 py-4 text-center">
-      <p className="text-sm text-white/60">
+    <footer className="flex flex-col items-center gap-2 border-t border-border bg-[var(--card)] px-4 py-4 text-center">
+      <p className="text-sm text-foreground/60">
         You blocked this contact. Unblock them to send messages.
       </p>
       <Button

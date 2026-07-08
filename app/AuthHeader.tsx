@@ -1,5 +1,6 @@
 "use client";
 
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { api } from "@/convex/_generated/api";
 import { UserButton, useAuth } from "@clerk/nextjs";
 import { useQuery } from "convex/react";
@@ -39,7 +40,8 @@ export function AuthHeader() {
       </Link>
     ) : null;
 
-  // The chat page hides its own header chrome; only show the admin shortcut.
+  // The chat page has its own theme toggle in its header; only surface the admin
+  // shortcut here (when applicable).
   if (onChat) {
     if (!adminLink) return null;
     return (
@@ -49,6 +51,7 @@ export function AuthHeader() {
 
   return (
     <header className="fixed right-4 top-4 z-50 flex items-center gap-3">
+      <ThemeToggle />
       {adminLink}
       <UserButton />
     </header>

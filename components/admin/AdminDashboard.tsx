@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { ThemeSegmentedControl, ThemeToggle } from "@/components/ThemeToggle";
 import { AdminConversations } from "./AdminConversations";
 import { AdminMessages } from "./AdminMessages";
 import { AdminOverview } from "./AdminOverview";
@@ -81,7 +82,13 @@ export function AdminDashboard() {
           ))}
         </nav>
 
-        <div className="mt-auto space-y-2">
+        <div className="mt-auto space-y-3">
+          <div className="px-1">
+            <div className="mb-1.5 px-2 text-[11px] font-medium text-muted-foreground">
+              Theme
+            </div>
+            <ThemeSegmentedControl />
+          </div>
           <Link
             href="/chat"
             className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
@@ -127,12 +134,15 @@ export function AdminDashboard() {
                 {DESCRIPTIONS[tab]}
               </p>
             </div>
-            <Link
-              href="/chat"
-              className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:hidden"
-            >
-              <ArrowLeft className="size-4" />
-            </Link>
+            <div className="flex items-center gap-2 md:hidden">
+              <ThemeToggle />
+              <Link
+                href="/chat"
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <ArrowLeft className="size-4" />
+              </Link>
+            </div>
           </header>
 
           {tab === "overview" ? <AdminOverview /> : null}
