@@ -27,40 +27,60 @@ import {
   Check,
   CheckCheck,
   ChevronDown,
+  Crown,
   Download,
   Forward,
   Loader2,
+  LogOut,
   MessageSquare,
   MoreVertical,
+  Pencil,
   Pin,
   PinOff,
   Reply,
   Search,
+  Shield,
+  ShieldCheck,
   Star,
   StarOff,
   Trash2,
+  UserMinus,
+  UserPlus,
+  Users,
   X,
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+type PublicUser = {
+  _id: Id<"users">;
+  name: string;
+  email?: string;
+  profileImage?: string;
+  lastSeen?: number;
+};
+
+type GroupMember = PublicUser & { role: "admin" | "member" };
+
 type ConversationPreview = {
   _id: Id<"conversations">;
+  kind: "direct" | "group";
+  title: string;
+  avatarUrl?: string;
+  memberCount: number;
   lastMessageAt: number;
   lastMessagePreview?: string;
   lastMessageType?: "text" | "image";
-  otherUser: {
-    _id: Id<"users">;
-    name: string;
-    email?: string;
-    profileImage?: string;
-  };
+  otherUser?: PublicUser;
+  otherLastSeen?: number;
   isArchived: boolean;
   isPinned: boolean;
   isFavorite: boolean;
   unread: boolean;
   isBlocked: boolean;
 };
+
+type FilterKey = "all" | "unread" | "favorites" | "groups";
 
 const ONLINE_THRESHOLD_MS = 60_000;
 
@@ -95,13 +115,50 @@ type ChatMessage = {
   imageUrl?: string;
   createdAt: number;
   forwarded?: boolean;
+  mentions?: Id<"users">[];
   replyTo?: {
     messageId: Id<"messages">;
     senderId: Id<"users">;
     type: "text" | "image";
     text?: string;
   };
+  senderName?: string;
+  senderImage?: string;
 };
+
+const MENTION_QUERY_REGEX = /(?:^|\s)@([^\s@]*)$/;
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Splits text into plain strings and highlighted @mention tokens.
+function renderTextWithMentions(
+  text: string,
+  mentionNames: string[],
+): (string | { mention: string })[] {
+  if (mentionNames.length === 0) {
+    return [text];
+  }
+  const pattern = new RegExp(
+    `@(?:${mentionNames.map(escapeRegExp).join("|")})`,
+    "g",
+  );
+  const parts: (string | { mention: string })[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+    parts.push({ mention: match[0] });
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+  return parts;
+}
 
 export function ChatPage() {
   const currentUser = useQuery(api.users.me);
@@ -130,11 +187,14 @@ export function ChatPage() {
     };
   }, [heartbeat]);
 
+  const now = useNow(30000);
   const [selectedConversationId, setSelectedConversationId] =
     useState<Id<"conversations"> | null>(null);
   const [sidebarSearch, setSidebarSearch] = useState("");
+  const [activeFilter, setActiveFilter] = useState<FilterKey>("all");
   const [showArchived, setShowArchived] = useState(false);
   const [showNewChat, setShowNewChat] = useState(false);
+  const [showNewGroup, setShowNewGroup] = useState(false);
   const [newChatQuery, setNewChatQuery] = useState("");
   const [debouncedNewChatQuery, setDebouncedNewChatQuery] = useState("");
   const [isStartingChat, setIsStartingChat] = useState(false);
@@ -152,11 +212,23 @@ export function ChatPage() {
     return () => clearTimeout(timeout);
   }, [newChatQuery]);
 
-  const archivedCount = useMemo(
-    () =>
-      conversations?.filter((conversation) => conversation.isArchived).length ??
-      0,
+  const activeConversations = useMemo(
+    () => conversations?.filter((c) => !c.isArchived) ?? [],
     [conversations],
+  );
+
+  const archivedCount = useMemo(
+    () => conversations?.filter((c) => c.isArchived).length ?? 0,
+    [conversations],
+  );
+
+  const counts = useMemo(
+    () => ({
+      unread: activeConversations.filter((c) => c.unread).length,
+      favorites: activeConversations.filter((c) => c.isFavorite).length,
+      groups: activeConversations.filter((c) => c.kind === "group").length,
+    }),
+    [activeConversations],
   );
 
   const filteredConversations = useMemo(() => {
@@ -173,12 +245,25 @@ export function ChatPage() {
       if (!matchesView) {
         return false;
       }
+
+      if (!showArchived) {
+        if (activeFilter === "unread" && !conversation.unread) {
+          return false;
+        }
+        if (activeFilter === "favorites" && !conversation.isFavorite) {
+          return false;
+        }
+        if (activeFilter === "groups" && conversation.kind !== "group") {
+          return false;
+        }
+      }
+
       if (!term) {
         return true;
       }
-      return conversation.otherUser.name.toLowerCase().includes(term);
+      return conversation.title.toLowerCase().includes(term);
     });
-  }, [conversations, sidebarSearch, showArchived]);
+  }, [conversations, sidebarSearch, showArchived, activeFilter]);
 
   const selectedConversation = conversations?.find(
     (conversation) => conversation._id === selectedConversationId,
@@ -206,6 +291,7 @@ export function ChatPage() {
     try {
       const conversationId = await getOrCreateConversation({ otherUserId });
       setShowArchived(false);
+      setActiveFilter("all");
       handleSelectConversation(conversationId);
       setShowNewChat(false);
       setNewChatQuery("");
@@ -240,6 +326,14 @@ export function ChatPage() {
           <div className="flex items-center gap-1">
             <button
               type="button"
+              onClick={() => setShowNewGroup(true)}
+              className="rounded-full p-2 text-white/80 transition-colors hover:bg-white/5 hover:text-white"
+              aria-label="New group"
+            >
+              <Users className="size-5" />
+            </button>
+            <button
+              type="button"
               onClick={() => setShowNewChat(true)}
               className="rounded-full p-2 text-white/80 transition-colors hover:bg-white/5 hover:text-white"
               aria-label="New chat"
@@ -256,7 +350,7 @@ export function ChatPage() {
           </div>
         </header>
 
-        <div className="px-3 pb-3">
+        <div className="px-3 pb-2">
           <label className="relative block">
             <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-white/40" />
             <input
@@ -267,6 +361,34 @@ export function ChatPage() {
             />
           </label>
         </div>
+
+        {!showArchived && (
+          <div className="flex flex-wrap gap-2 px-3 pb-2">
+            <FilterChip
+              label="All"
+              active={activeFilter === "all"}
+              onClick={() => setActiveFilter("all")}
+            />
+            <FilterChip
+              label="Unread"
+              count={counts.unread}
+              active={activeFilter === "unread"}
+              onClick={() => setActiveFilter("unread")}
+            />
+            <FilterChip
+              label="Favourites"
+              count={counts.favorites}
+              active={activeFilter === "favorites"}
+              onClick={() => setActiveFilter("favorites")}
+            />
+            <FilterChip
+              label="Groups"
+              count={counts.groups}
+              active={activeFilter === "groups"}
+              onClick={() => setActiveFilter("groups")}
+            />
+          </div>
+        )}
 
         {showArchived && (
           <button
@@ -279,19 +401,22 @@ export function ChatPage() {
           </button>
         )}
 
-        {!showArchived && archivedCount > 0 && sidebarSearch.trim() === "" && (
-          <button
-            type="button"
-            onClick={() => setShowArchived(true)}
-            className="flex w-full items-center gap-3 border-b border-white/5 px-4 py-3 text-sm text-white/80 transition-colors hover:bg-[#202c33]"
-          >
-            <Archive className="size-4 text-[#00A884]" />
-            <span className="font-medium">Archived</span>
-            <span className="ml-auto text-xs text-white/45">
-              {archivedCount}
-            </span>
-          </button>
-        )}
+        {!showArchived &&
+          archivedCount > 0 &&
+          activeFilter === "all" &&
+          sidebarSearch.trim() === "" && (
+            <button
+              type="button"
+              onClick={() => setShowArchived(true)}
+              className="flex w-full items-center gap-3 border-b border-white/5 px-4 py-3 text-sm text-white/80 transition-colors hover:bg-[#202c33]"
+            >
+              <Archive className="size-4 text-[#00A884]" />
+              <span className="font-medium">Archived</span>
+              <span className="ml-auto text-xs text-white/45">
+                {archivedCount}
+              </span>
+            </button>
+          )}
 
         <div className="flex-1 overflow-y-auto">
           {filteredConversations.length === 0 ? (
@@ -300,7 +425,7 @@ export function ChatPage() {
                 ? "No archived chats."
                 : conversations.length === 0
                   ? "No chats yet. Start a new conversation."
-                  : "No chats match your search."}
+                  : "No chats match this filter."}
             </div>
           ) : (
             filteredConversations.map((conversation) => (
@@ -308,6 +433,11 @@ export function ChatPage() {
                 key={conversation._id}
                 conversation={conversation}
                 isSelected={selectedConversationId === conversation._id}
+                isOnline={
+                  conversation.kind === "direct" &&
+                  conversation.otherLastSeen !== undefined &&
+                  now - conversation.otherLastSeen < ONLINE_THRESHOLD_MS
+                }
                 onSelect={() => handleSelectConversation(conversation._id)}
               />
             ))
@@ -354,19 +484,66 @@ export function ChatPage() {
           onSelectUser={(userId) => void startChatWithUser(userId)}
         />
       )}
+
+      {showNewGroup && (
+        <NewGroupDialog
+          onClose={() => setShowNewGroup(false)}
+          onCreated={(conversationId) => {
+            setShowNewGroup(false);
+            setShowArchived(false);
+            setActiveFilter("all");
+            handleSelectConversation(conversationId);
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+function FilterChip({
+  label,
+  count,
+  active,
+  onClick,
+}: {
+  label: string;
+  count?: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "rounded-full px-3 py-1 text-sm font-medium transition-colors",
+        active
+          ? "bg-[#00A884]/20 text-[#00A884]"
+          : "bg-[#202c33] text-white/60 hover:bg-[#2a3942] hover:text-white/80",
+      )}
+    >
+      {label}
+      {count !== undefined && count > 0 && (
+        <span className={cn("ml-1", active ? "text-[#00A884]" : "text-white/40")}>
+          {count}
+        </span>
+      )}
+    </button>
   );
 }
 
 function ConversationListItem({
   conversation,
   isSelected,
+  isOnline,
   onSelect,
 }: {
   conversation: ConversationPreview;
   isSelected: boolean;
+  isOnline: boolean;
   onSelect: () => void;
 }) {
+  const isGroup = conversation.kind === "group";
   return (
     <div
       role="button"
@@ -384,9 +561,11 @@ function ConversationListItem({
       )}
     >
       <UserAvatar
-        name={conversation.otherUser.name}
-        imageUrl={conversation.otherUser.profileImage}
+        name={conversation.title}
+        imageUrl={conversation.avatarUrl}
         className="size-12"
+        group={isGroup}
+        online={isGroup ? undefined : isOnline}
       />
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-2">
@@ -396,7 +575,7 @@ function ConversationListItem({
               conversation.unread && "font-semibold",
             )}
           >
-            {conversation.otherUser.name}
+            {conversation.title}
           </p>
           <span
             className={cn(
@@ -417,7 +596,8 @@ function ConversationListItem({
               conversation.unread && "font-medium text-white/80",
             )}
           >
-            {conversation.lastMessagePreview ?? "No messages yet"}
+            {conversation.lastMessagePreview ??
+              (isGroup ? `${conversation.memberCount} members` : "No messages yet")}
           </p>
           <span className="ml-auto flex shrink-0 items-center gap-1.5 pl-1">
             {conversation.isBlocked && (
@@ -468,8 +648,10 @@ function ConversationActionsMenu({
   const markUnread = useMutation(api.conversations.markUnread);
   const setBlocked = useMutation(api.conversations.setBlocked);
   const removeConversation = useMutation(api.conversations.remove);
+  const leaveGroup = useMutation(api.conversations.leaveGroup);
 
   const conversationId = conversation._id;
+  const isGroup = conversation.kind === "group";
 
   return (
     <DropdownMenu>
@@ -524,18 +706,32 @@ function ConversationActionsMenu({
             : "Add to favourites"}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem
-          variant="destructive"
-          onClick={() =>
-            void setBlocked({
-              otherUserId: conversation.otherUser._id,
-              blocked: !conversation.isBlocked,
-            })
-          }
-        >
-          <Ban />
-          {conversation.isBlocked ? "Unblock" : "Block"}
-        </DropdownMenuItem>
+        {!isGroup && conversation.otherUser && (
+          <DropdownMenuItem
+            variant="destructive"
+            onClick={() =>
+              void setBlocked({
+                otherUserId: conversation.otherUser!._id,
+                blocked: !conversation.isBlocked,
+              })
+            }
+          >
+            <Ban />
+            {conversation.isBlocked ? "Unblock" : "Block"}
+          </DropdownMenuItem>
+        )}
+        {isGroup && (
+          <DropdownMenuItem
+            variant="destructive"
+            onClick={() => {
+              void leaveGroup({ conversationId });
+              onDeleted?.();
+            }}
+          >
+            <LogOut />
+            Leave group
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem
           variant="destructive"
           onClick={() => {
@@ -575,7 +771,7 @@ function NewChatDialog({
 }: {
   query: string;
   onQueryChange: (value: string) => void;
-  results: ConversationPreview["otherUser"][] | undefined;
+  results: PublicUser[] | undefined;
   isLoading: boolean;
   onClose: () => void;
   onSelectUser: (userId: Id<"users">) => void;
@@ -650,6 +846,194 @@ function NewChatDialog({
   );
 }
 
+function NewGroupDialog({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated: (conversationId: Id<"conversations">) => void;
+}) {
+  const createGroup = useMutation(api.conversations.createGroup);
+  const [name, setName] = useState("");
+  const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [selected, setSelected] = useState<PublicUser[]>([]);
+  const [isCreating, setIsCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const results = useQuery(
+    api.users.search,
+    debouncedQuery.length > 0 ? { query: debouncedQuery } : "skip",
+  );
+
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebouncedQuery(query), 250);
+    return () => clearTimeout(timeout);
+  }, [query]);
+
+  const toggleUser = (user: PublicUser) => {
+    setSelected((prev) =>
+      prev.some((u) => u._id === user._id)
+        ? prev.filter((u) => u._id !== user._id)
+        : [...prev, user],
+    );
+  };
+
+  const handleCreate = async () => {
+    if (name.trim().length === 0) {
+      setError("Please enter a group name");
+      return;
+    }
+    if (selected.length === 0) {
+      setError("Add at least one member");
+      return;
+    }
+
+    setIsCreating(true);
+    setError(null);
+    try {
+      const conversationId = await createGroup({
+        name: name.trim(),
+        memberIds: selected.map((u) => u._id),
+      });
+      onCreated(conversationId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create group");
+      setIsCreating(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-4 pt-16">
+      <div className="flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-xl bg-[#111B21] shadow-2xl ring-1 ring-white/10">
+        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+          <h2 className="text-lg font-medium">New group</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-1 text-white/70 hover:bg-white/5 hover:text-white"
+            aria-label="Close"
+          >
+            <X className="size-5" />
+          </button>
+        </div>
+
+        <div className="space-y-3 p-4">
+          <input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Group name"
+            autoFocus
+            className="w-full rounded-lg bg-[#202c33] px-4 py-2.5 text-sm text-white outline-none placeholder:text-white/40 focus:ring-1 focus:ring-[#00A884]/50"
+          />
+
+          {selected.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {selected.map((user) => (
+                <span
+                  key={user._id}
+                  className="flex items-center gap-1 rounded-full bg-[#2a3942] py-1 pr-1 pl-3 text-xs text-white"
+                >
+                  {user.name}
+                  <button
+                    type="button"
+                    onClick={() => toggleUser(user)}
+                    className="rounded-full p-0.5 text-white/60 hover:bg-white/10 hover:text-white"
+                    aria-label={`Remove ${user.name}`}
+                  >
+                    <X className="size-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          <label className="relative block">
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-white/40" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Add members by name or email"
+              className="w-full rounded-lg bg-[#202c33] py-2.5 pr-3 pl-10 text-sm text-white outline-none placeholder:text-white/40 focus:ring-1 focus:ring-[#00A884]/50"
+            />
+          </label>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto border-t border-white/10">
+          {query.trim().length === 0 ? (
+            <p className="px-4 py-6 text-sm text-white/50">
+              Search for people to add to the group.
+            </p>
+          ) : results === undefined ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="size-6 animate-spin text-[#00A884]" />
+            </div>
+          ) : results.length === 0 ? (
+            <p className="px-4 py-6 text-sm text-white/50">No users found.</p>
+          ) : (
+            results.map((user) => {
+              const isSelected = selected.some((u) => u._id === user._id);
+              return (
+                <button
+                  key={user._id}
+                  type="button"
+                  onClick={() => toggleUser(user)}
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[#202c33]"
+                >
+                  <UserAvatar
+                    name={user.name}
+                    imageUrl={user.profileImage}
+                    className="size-10"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">{user.name}</p>
+                    {user.email && (
+                      <p className="truncate text-sm text-white/50">
+                        {user.email}
+                      </p>
+                    )}
+                  </div>
+                  <span
+                    className={cn(
+                      "flex size-5 shrink-0 items-center justify-center rounded-full border",
+                      isSelected
+                        ? "border-[#00A884] bg-[#00A884] text-white"
+                        : "border-white/30",
+                    )}
+                  >
+                    {isSelected && <Check className="size-3.5" />}
+                  </span>
+                </button>
+              );
+            })
+          )}
+        </div>
+
+        <div className="flex items-center justify-between gap-3 border-t border-white/10 px-4 py-3">
+          {error ? (
+            <p className="text-sm text-red-300">{error}</p>
+          ) : (
+            <p className="text-sm text-white/40">
+              {selected.length} selected
+            </p>
+          )}
+          <Button
+            className="bg-[#00A884] text-white hover:bg-[#06cf9c]"
+            onClick={() => void handleCreate()}
+            disabled={isCreating}
+          >
+            {isCreating ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              "Create group"
+            )}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MessagePanel({
   conversation,
   currentUserId,
@@ -662,15 +1046,21 @@ function MessagePanel({
   onDeleted?: () => void;
 }) {
   const conversationId = conversation._id;
+  const isGroup = conversation.kind === "group";
   const otherUser = conversation.otherUser;
-  const isBlocked = conversation.isBlocked;
+  const isBlocked = !isGroup && conversation.isBlocked;
   const sendMessage = useMutation(api.messages.send);
   const deleteMessage = useMutation(api.messages.remove);
   const markRead = useMutation(api.conversations.markRead);
   const generateUploadUrl = useMutation(api.users.generateUploadUrl);
-  const otherStatus = useQuery(api.conversations.otherMemberStatus, {
-    conversationId,
-  });
+  const otherStatus = useQuery(
+    api.conversations.otherMemberStatus,
+    isGroup ? "skip" : { conversationId },
+  );
+  const groupMembers = useQuery(
+    api.conversations.members,
+    isGroup ? { conversationId } : "skip",
+  );
   const { results, status, loadMore } = usePaginatedQuery(
     api.messages.list,
     { conversationId },
@@ -680,10 +1070,41 @@ function MessagePanel({
   const now = useNow(30000);
   const otherLastReadAt = otherStatus?.lastReadAt ?? 0;
   const otherLastSeen = otherStatus?.lastSeen;
-  const presence = presenceLabel(otherLastSeen, now);
+  const presence = isGroup ? "" : presenceLabel(otherLastSeen, now);
+
+  const groupSubtitle = useMemo(() => {
+    if (!isGroup) {
+      return "";
+    }
+    if (!groupMembers) {
+      return `${conversation.memberCount} members`;
+    }
+    return groupMembers
+      .map((member) => (member._id === currentUserId ? "You" : member.name))
+      .join(", ");
+  }, [isGroup, groupMembers, conversation.memberCount, currentUserId]);
+
+  const iAmAdmin = useMemo(
+    () =>
+      groupMembers?.some(
+        (member) => member._id === currentUserId && member.role === "admin",
+      ) ?? false,
+    [groupMembers, currentUserId],
+  );
+
+  const memberNameById = useMemo(() => {
+    const map = new Map<Id<"users">, string>();
+    groupMembers?.forEach((member) => map.set(member._id, member.name));
+    return map;
+  }, [groupMembers]);
+
+  const mentionCandidates = useMemo<GroupMember[]>(
+    () => (groupMembers ?? []).filter((member) => member._id !== currentUserId),
+    [groupMembers, currentUserId],
+  );
 
   const receiptFor = (message: ChatMessage): MessageReceipt | null => {
-    if (message.senderId !== currentUserId) {
+    if (isGroup || message.senderId !== currentUserId) {
       return null;
     }
     if (otherLastReadAt >= message.createdAt) {
@@ -696,6 +1117,7 @@ function MessagePanel({
   };
 
   const [draft, setDraft] = useState("");
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -714,12 +1136,79 @@ function MessagePanel({
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length, conversationId]);
 
-  const latestIncomingAt = messages.length > 0 ? messages[messages.length - 1].createdAt : 0;
+  const latestIncomingAt =
+    messages.length > 0 ? messages[messages.length - 1].createdAt : 0;
   useEffect(() => {
     if (latestIncomingAt > 0) {
       void markRead({ conversationId });
     }
   }, [conversationId, latestIncomingAt, markRead]);
+
+  const replyLabel = (message: ChatMessage): string => {
+    if (message.senderId === currentUserId) {
+      return "You";
+    }
+    return message.senderName ?? otherUser?.name ?? "Unknown";
+  };
+
+  const mentionMatches = useMemo(() => {
+    if (mentionQuery === null) {
+      return [];
+    }
+    const q = mentionQuery.toLowerCase();
+    return mentionCandidates
+      .filter((member) => member.name.toLowerCase().includes(q))
+      .slice(0, 6);
+  }, [mentionQuery, mentionCandidates]);
+
+  const handleDraftChange = (
+    event: React.ChangeEvent<HTMLTextAreaElement>,
+  ) => {
+    const value = event.target.value;
+    setDraft(value);
+    if (!isGroup) {
+      return;
+    }
+    const caret = event.target.selectionStart ?? value.length;
+    const match = value.slice(0, caret).match(MENTION_QUERY_REGEX);
+    setMentionQuery(match ? match[1] : null);
+  };
+
+  const insertMention = (member: GroupMember) => {
+    const textarea = composerRef.current;
+    const caret = textarea?.selectionStart ?? draft.length;
+    const before = draft.slice(0, caret);
+    const after = draft.slice(caret);
+    const match = before.match(MENTION_QUERY_REGEX);
+    if (!match) {
+      return;
+    }
+    const lead = match[0].startsWith("@") ? "" : match[0][0];
+    const start = before.length - match[0].length;
+    const newBefore = `${before.slice(0, start)}${lead}@${member.name} `;
+    setDraft(`${newBefore}${after}`);
+    setMentionQuery(null);
+    requestAnimationFrame(() => {
+      textarea?.focus();
+      textarea?.setSelectionRange(newBefore.length, newBefore.length);
+    });
+  };
+
+  const computeMentions = (text: string): Id<"users">[] => {
+    if (!isGroup || !groupMembers) {
+      return [];
+    }
+    const ids: Id<"users">[] = [];
+    for (const member of groupMembers) {
+      if (member._id === currentUserId) {
+        continue;
+      }
+      if (text.includes(`@${member.name}`)) {
+        ids.push(member._id);
+      }
+    }
+    return ids;
+  };
 
   const handleSend = async () => {
     const text = draft.trim();
@@ -730,13 +1219,17 @@ function MessagePanel({
     setIsSending(true);
     setError(null);
 
+    const mentions = computeMentions(text);
+
     try {
       await sendMessage({
         conversationId,
         text,
         replyToId: replyTarget?._id,
+        mentions: mentions.length > 0 ? mentions : undefined,
       });
       setDraft("");
+      setMentionQuery(null);
       setReplyTarget(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send message");
@@ -832,177 +1325,221 @@ function MessagePanel({
         )}
       >
         <header className="flex items-center gap-3 border-b border-white/10 bg-[#202c33] px-4 py-3">
-        {onBack && (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="text-white hover:bg-white/10"
-            onClick={onBack}
-          >
-            ←
-          </Button>
-        )}
-        <button
-          type="button"
-          onClick={() => setShowContactInfo((value) => !value)}
-          className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left transition-colors hover:opacity-90"
-          aria-label="View contact info"
-        >
-          <UserAvatar
-            name={otherUser.name}
-            imageUrl={otherUser.profileImage}
-            className="size-10"
-          />
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-medium">{otherUser.name}</p>
-            {presence ? (
-              <p
-                className={cn(
-                  "truncate text-xs",
-                  presence === "online" ? "text-[#00A884]" : "text-white/50",
-                )}
-              >
-                {presence}
-              </p>
-            ) : (
-              otherUser.email && (
-                <p className="truncate text-xs text-white/50">
-                  {otherUser.email}
-                </p>
-              )
-            )}
-          </div>
-        </button>
-        <ConversationActionsMenu
-          conversation={conversation}
-          align="end"
-          side="bottom"
-          triggerClassName="rounded-full p-2 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
-          onDeleted={onDeleted}
-        />
-      </header>
-
-      <div
-        className="flex-1 overflow-y-auto px-4 py-4"
-        style={{
-          backgroundImage:
-            "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.03) 1px, transparent 0)",
-          backgroundSize: "24px 24px",
-        }}
-      >
-        {status === "CanLoadMore" && (
-          <div className="mb-4 flex justify-center">
+          {onBack && (
             <Button
-              variant="outline"
-              size="sm"
-              className="border-white/10 bg-transparent text-white hover:bg-white/5"
-              onClick={() => loadMore(30)}
+              variant="ghost"
+              size="icon-sm"
+              className="text-white hover:bg-white/10"
+              onClick={onBack}
             >
-              Load older messages
+              ←
             </Button>
-          </div>
-        )}
-
-        <div className="space-y-2">
-          {messages.map((message) => (
-            <MessageRow
-              key={message._id}
-              message={message}
-              isOwn={message.senderId === currentUserId}
-              receipt={receiptFor(message)}
-              currentUserId={currentUserId}
-              otherUserName={otherUser.name}
-              onReply={handleReply}
-              onForward={(msg) => setForwardMessage(msg)}
-              onDownload={(msg) => void handleDownload(msg)}
-              onDelete={(msg) => void handleDelete(msg)}
-            />
-          ))}
-        </div>
-        <div ref={bottomRef} />
-      </div>
-
-      {isBlocked ? (
-        <BlockedComposer otherUserId={otherUser._id} />
-      ) : (
-        <footer className="border-t border-white/10 bg-[#202c33] px-4 py-3">
-        {replyTarget && (
-          <div className="mb-2 flex items-center gap-2 rounded-lg bg-[#111B21] px-3 py-2">
-            <div className="min-w-0 flex-1 border-l-2 border-[#00A884] pl-2">
-              <p className="text-xs font-medium text-[#00A884]">
-                {replyTarget.senderId === currentUserId
-                  ? "You"
-                  : otherUser.name}
-              </p>
-              <p className="truncate text-sm text-white/60">
-                {replyTarget.type === "image"
-                  ? "Photo"
-                  : (replyTarget.text ?? "")}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setReplyTarget(null)}
-              className="rounded-full p-1 text-white/60 hover:bg-white/10 hover:text-white"
-              aria-label="Cancel reply"
-            >
-              <X className="size-4" />
-            </button>
-          </div>
-        )}
-        <div className="flex items-end gap-2">
+          )}
           <button
             type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isUploadingImage || isSending}
-            className="rounded-full p-2 text-white/70 transition-colors hover:bg-white/5 hover:text-white disabled:opacity-50"
-            aria-label="Attach image"
+            onClick={() => setShowContactInfo((value) => !value)}
+            className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left transition-colors hover:opacity-90"
+            aria-label="View contact info"
           >
-            {isUploadingImage ? (
-              <Loader2 className="size-5 animate-spin" />
-            ) : (
-              <Camera className="size-5" />
-            )}
+            <UserAvatar
+              name={conversation.title}
+              imageUrl={conversation.avatarUrl}
+              className="size-10"
+              group={isGroup}
+              online={isGroup ? undefined : presence === "online"}
+              statusClassName="border-[#202c33]"
+            />
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-medium">{conversation.title}</p>
+              {isGroup ? (
+                <p className="truncate text-xs text-white/50">{groupSubtitle}</p>
+              ) : presence ? (
+                <p
+                  className={cn(
+                    "truncate text-xs",
+                    presence === "online" ? "text-[#00A884]" : "text-white/50",
+                  )}
+                >
+                  {presence}
+                </p>
+              ) : (
+                otherUser?.email && (
+                  <p className="truncate text-xs text-white/50">
+                    {otherUser.email}
+                  </p>
+                )
+              )}
+            </div>
           </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(event) => void handleImageUpload(event)}
+          <ConversationActionsMenu
+            conversation={conversation}
+            align="end"
+            side="bottom"
+            triggerClassName="rounded-full p-2 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+            onDeleted={onDeleted}
           />
-          <textarea
-            ref={composerRef}
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            placeholder="Type a message"
-            rows={1}
-            className="max-h-32 min-h-10 flex-1 resize-none rounded-lg bg-[#2a3942] px-4 py-2.5 text-sm text-white outline-none placeholder:text-white/40 focus:ring-1 focus:ring-[#00A884]/40"
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                void handleSend();
-              }
-            }}
-          />
-          <Button
-            className="bg-[#00A884] text-white hover:bg-[#06cf9c]"
-            onClick={() => void handleSend()}
-            disabled={isSending || draft.trim().length === 0}
-          >
-            Send
-          </Button>
+        </header>
+
+        <div
+          className="flex-1 overflow-y-auto px-4 py-4"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.03) 1px, transparent 0)",
+            backgroundSize: "24px 24px",
+          }}
+        >
+          {status === "CanLoadMore" && (
+            <div className="mb-4 flex justify-center">
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-white/10 bg-transparent text-white hover:bg-white/5"
+                onClick={() => loadMore(30)}
+              >
+                Load older messages
+              </Button>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            {messages.map((message) => (
+              <MessageRow
+                key={message._id}
+                message={message}
+                isOwn={message.senderId === currentUserId}
+                isGroup={isGroup}
+                canDelete={
+                  message.senderId === currentUserId || (isGroup && iAmAdmin)
+                }
+                receipt={receiptFor(message)}
+                replyLabel={replyLabel(message)}
+                mentionNames={(message.mentions ?? [])
+                  .map((id) => memberNameById.get(id))
+                  .filter((name): name is string => name !== undefined)}
+                onReply={handleReply}
+                onForward={(msg) => setForwardMessage(msg)}
+                onDownload={(msg) => void handleDownload(msg)}
+                onDelete={(msg) => void handleDelete(msg)}
+              />
+            ))}
+          </div>
+          <div ref={bottomRef} />
         </div>
-        {error && <p className="mt-2 text-sm text-red-300">{error}</p>}
-        </footer>
-      )}
+
+        {isBlocked && otherUser ? (
+          <BlockedComposer otherUserId={otherUser._id} />
+        ) : (
+          <footer className="border-t border-white/10 bg-[#202c33] px-4 py-3">
+            {replyTarget && (
+              <div className="mb-2 flex items-center gap-2 rounded-lg bg-[#111B21] px-3 py-2">
+                <div className="min-w-0 flex-1 border-l-2 border-[#00A884] pl-2">
+                  <p className="text-xs font-medium text-[#00A884]">
+                    {replyLabel(replyTarget)}
+                  </p>
+                  <p className="truncate text-sm text-white/60">
+                    {replyTarget.type === "image"
+                      ? "Photo"
+                      : (replyTarget.text ?? "")}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setReplyTarget(null)}
+                  className="rounded-full p-1 text-white/60 hover:bg-white/10 hover:text-white"
+                  aria-label="Cancel reply"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+            )}
+            <div className="relative flex items-end gap-2">
+              {isGroup && mentionQuery !== null && mentionMatches.length > 0 && (
+                <div className="absolute bottom-full left-10 mb-2 max-h-56 w-64 overflow-y-auto rounded-lg bg-[#233138] py-1 shadow-2xl ring-1 ring-white/10">
+                  {mentionMatches.map((member) => (
+                    <button
+                      key={member._id}
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => insertMention(member)}
+                      className="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-white/5"
+                    >
+                      <UserAvatar
+                        name={member.name}
+                        imageUrl={member.profileImage}
+                        className="size-8"
+                      />
+                      <span className="min-w-0 flex-1 truncate text-sm text-white">
+                        {member.name}
+                      </span>
+                      {member.role === "admin" && (
+                        <ShieldCheck className="size-3.5 shrink-0 text-[#00A884]" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploadingImage || isSending}
+                className="rounded-full p-2 text-white/70 transition-colors hover:bg-white/5 hover:text-white disabled:opacity-50"
+                aria-label="Attach image"
+              >
+                {isUploadingImage ? (
+                  <Loader2 className="size-5 animate-spin" />
+                ) : (
+                  <Camera className="size-5" />
+                )}
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(event) => void handleImageUpload(event)}
+              />
+              <textarea
+                ref={composerRef}
+                value={draft}
+                onChange={handleDraftChange}
+                onBlur={() => setMentionQuery(null)}
+                placeholder="Type a message"
+                rows={1}
+                className="max-h-32 min-h-10 flex-1 resize-none rounded-lg bg-[#2a3942] px-4 py-2.5 text-sm text-white outline-none placeholder:text-white/40 focus:ring-1 focus:ring-[#00A884]/40"
+                onKeyDown={(event) => {
+                  if (event.key === "Escape" && mentionQuery !== null) {
+                    setMentionQuery(null);
+                    return;
+                  }
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    if (mentionQuery !== null && mentionMatches.length > 0) {
+                      event.preventDefault();
+                      insertMention(mentionMatches[0]);
+                      return;
+                    }
+                    event.preventDefault();
+                    void handleSend();
+                  }
+                }}
+              />
+              <Button
+                className="bg-[#00A884] text-white hover:bg-[#06cf9c]"
+                onClick={() => void handleSend()}
+                disabled={isSending || draft.trim().length === 0}
+              >
+                Send
+              </Button>
+            </div>
+            {error && <p className="mt-2 text-sm text-red-300">{error}</p>}
+          </footer>
+        )}
       </div>
 
       {showContactInfo && (
         <ContactInfoPanel
-          conversationId={conversationId}
-          otherUser={otherUser}
+          conversation={conversation}
           presence={presence}
+          currentUserId={currentUserId}
           onClose={() => setShowContactInfo(false)}
         />
       )}
@@ -1035,9 +1572,11 @@ function MessageReceiptTicks({ receipt }: { receipt: MessageReceipt }) {
 function MessageRow({
   message,
   isOwn,
+  isGroup,
+  canDelete,
   receipt,
-  currentUserId,
-  otherUserName,
+  replyLabel,
+  mentionNames,
   onReply,
   onForward,
   onDownload,
@@ -1045,16 +1584,31 @@ function MessageRow({
 }: {
   message: ChatMessage;
   isOwn: boolean;
+  isGroup: boolean;
+  canDelete: boolean;
   receipt: MessageReceipt | null;
-  currentUserId: Id<"users">;
-  otherUserName: string;
+  replyLabel: string;
+  mentionNames: string[];
   onReply: (message: ChatMessage) => void;
   onForward: (message: ChatMessage) => void;
   onDownload: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
 }) {
+  const showSenderMeta = isGroup && !isOwn;
   return (
-    <div className={cn("flex", isOwn ? "justify-end" : "justify-start")}>
+    <div
+      className={cn(
+        "flex items-end gap-2",
+        isOwn ? "justify-end" : "justify-start",
+      )}
+    >
+      {showSenderMeta && (
+        <UserAvatar
+          name={message.senderName ?? "Unknown"}
+          imageUrl={message.senderImage}
+          className="size-8 self-end"
+        />
+      )}
       <div
         className={cn(
           "group/msg relative max-w-[75%] rounded-lg px-3 py-2 shadow-sm",
@@ -1087,17 +1641,27 @@ function MessageRow({
                   Download
                 </DropdownMenuItem>
               )}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                variant="destructive"
-                onClick={() => onDelete(message)}
-              >
-                <Trash2 />
-                Delete
-              </DropdownMenuItem>
+              {canDelete && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onClick={() => onDelete(message)}
+                  >
+                    <Trash2 />
+                    Delete
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+
+        {showSenderMeta && (
+          <p className="mb-0.5 pr-5 text-xs font-medium text-[#53bdeb]">
+            {message.senderName ?? "Unknown"}
+          </p>
+        )}
 
         {message.forwarded && (
           <p className="mb-0.5 flex items-center gap-1 text-xs italic text-white/40">
@@ -1113,11 +1677,7 @@ function MessageRow({
               isOwn ? "bg-black/20" : "bg-black/25",
             )}
           >
-            <p className="font-medium text-[#00A884]">
-              {message.replyTo.senderId === currentUserId
-                ? "You"
-                : otherUserName}
-            </p>
+            <p className="font-medium text-[#00A884]">{replyLabel}</p>
             <p className="truncate text-white/60">
               {message.replyTo.type === "image"
                 ? "Photo"
@@ -1128,7 +1688,19 @@ function MessageRow({
 
         {message.type === "text" ? (
           <p className="whitespace-pre-wrap break-words pr-5 text-[15px] text-white">
-            {message.text}
+            {renderTextWithMentions(message.text ?? "", mentionNames).map(
+              (part, index) =>
+                typeof part === "string" ? (
+                  <span key={index}>{part}</span>
+                ) : (
+                  <span
+                    key={index}
+                    className="rounded bg-[#53bdeb]/15 font-medium text-[#53bdeb]"
+                  >
+                    {part.mention}
+                  </span>
+                ),
+            )}
           </p>
         ) : (
           message.imageUrl && (
@@ -1183,7 +1755,7 @@ function ForwardDialog({
       if (!term) {
         return true;
       }
-      return conversation.otherUser.name.toLowerCase().includes(term);
+      return conversation.title.toLowerCase().includes(term);
     });
   }, [conversations, search, currentConversationId]);
 
@@ -1244,12 +1816,13 @@ function ForwardDialog({
                 className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[#202c33] disabled:opacity-60"
               >
                 <UserAvatar
-                  name={conversation.otherUser.name}
-                  imageUrl={conversation.otherUser.profileImage}
+                  name={conversation.title}
+                  imageUrl={conversation.avatarUrl}
                   className="size-10"
+                  group={conversation.kind === "group"}
                 />
                 <p className="min-w-0 flex-1 truncate font-medium text-white">
-                  {conversation.otherUser.name}
+                  {conversation.title}
                 </p>
                 {forwardingTo === conversation._id && (
                   <Loader2 className="size-4 animate-spin text-[#00A884]" />
@@ -1265,17 +1838,96 @@ function ForwardDialog({
 }
 
 function ContactInfoPanel({
-  conversationId,
-  otherUser,
+  conversation,
   presence,
+  currentUserId,
   onClose,
 }: {
-  conversationId: Id<"conversations">;
-  otherUser: ConversationPreview["otherUser"];
+  conversation: ConversationPreview;
   presence: string;
+  currentUserId: Id<"users">;
   onClose: () => void;
 }) {
+  const conversationId = conversation._id;
+  const isGroup = conversation.kind === "group";
+  const otherUser = conversation.otherUser;
   const images = useQuery(api.messages.listSharedImages, { conversationId });
+  const groupMembers = useQuery(
+    api.conversations.members,
+    isGroup ? { conversationId } : "skip",
+  );
+
+  const generateUploadUrl = useMutation(api.users.generateUploadUrl);
+  const updateGroup = useMutation(api.conversations.updateGroup);
+  const addGroupMembers = useMutation(api.conversations.addGroupMembers);
+  const removeGroupMember = useMutation(api.conversations.removeGroupMember);
+  const setGroupAdmin = useMutation(api.conversations.setGroupAdmin);
+
+  const iAmAdmin =
+    groupMembers?.some(
+      (member) => member._id === currentUserId && member.role === "admin",
+    ) ?? false;
+
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(conversation.title);
+  const [showAddMembers, setShowAddMembers] = useState(false);
+  const [savingImage, setSavingImage] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+
+  const existingMemberIds = groupMembers?.map((member) => member._id) ?? [];
+
+  const handleSaveName = async () => {
+    const name = nameDraft.trim();
+    if (name.length === 0) {
+      return;
+    }
+    try {
+      await updateGroup({ conversationId, name });
+      setIsEditingName(false);
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : "Failed to rename group",
+      );
+    }
+  };
+
+  const handleImageChange = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) {
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      setActionError("Please choose an image file");
+      return;
+    }
+    setSavingImage(true);
+    setActionError(null);
+    try {
+      const uploadUrl = await generateUploadUrl();
+      const response = await fetch(uploadUrl, {
+        method: "POST",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      if (!response.ok) {
+        throw new Error("Failed to upload image");
+      }
+      const { storageId } = (await response.json()) as {
+        storageId: Id<"_storage">;
+      };
+      await updateGroup({ conversationId, imageStorageId: storageId });
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : "Failed to update image",
+      );
+    } finally {
+      setSavingImage(false);
+    }
+  };
 
   return (
     <aside className="flex h-full w-full min-w-0 flex-col border-l border-white/10 bg-[#111B21] md:w-[380px] md:shrink-0">
@@ -1288,33 +1940,230 @@ function ContactInfoPanel({
         >
           <X className="size-5" />
         </button>
-        <p className="font-medium">Contact info</p>
+        <p className="font-medium">{isGroup ? "Group info" : "Contact info"}</p>
       </header>
 
       <div className="flex-1 overflow-y-auto">
         <div className="flex flex-col items-center gap-3 bg-[#111B21] px-6 py-8 text-center">
-          <UserAvatar
-            name={otherUser.name}
-            imageUrl={otherUser.profileImage}
-            className="size-40"
-          />
-          <h2 className="mt-2 text-xl font-medium text-white">
-            {otherUser.name}
-          </h2>
-          {otherUser.email && (
-            <p className="text-sm text-white/50">{otherUser.email}</p>
-          )}
-          {presence && (
-            <p
-              className={cn(
-                "text-sm",
-                presence === "online" ? "text-[#00A884]" : "text-white/50",
+          <div className="relative">
+            <UserAvatar
+              name={conversation.title}
+              imageUrl={conversation.avatarUrl}
+              className="size-40"
+              group={isGroup}
+              online={isGroup ? undefined : presence === "online"}
+              statusClassName="size-6 border-4 border-[#111B21]"
+            />
+            {isGroup && iAmAdmin && (
+              <button
+                type="button"
+                onClick={() => imageInputRef.current?.click()}
+                disabled={savingImage}
+                className="absolute right-2 bottom-2 flex size-10 items-center justify-center rounded-full bg-[#00A884] text-white shadow-lg transition-colors hover:bg-[#06cf9c] disabled:opacity-60"
+                aria-label="Change group image"
+              >
+                {savingImage ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Camera className="size-4" />
+                )}
+              </button>
+            )}
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(event) => void handleImageChange(event)}
+            />
+          </div>
+
+          {isGroup && iAmAdmin && isEditingName ? (
+            <div className="mt-2 flex w-full items-center gap-2">
+              <input
+                value={nameDraft}
+                onChange={(event) => setNameDraft(event.target.value)}
+                autoFocus
+                className="min-w-0 flex-1 rounded-lg bg-[#202c33] px-3 py-2 text-center text-lg text-white outline-none focus:ring-1 focus:ring-[#00A884]/50"
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    void handleSaveName();
+                  }
+                  if (event.key === "Escape") {
+                    setNameDraft(conversation.title);
+                    setIsEditingName(false);
+                  }
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => void handleSaveName()}
+                className="rounded-full p-2 text-[#00A884] hover:bg-white/5"
+                aria-label="Save name"
+              >
+                <Check className="size-5" />
+              </button>
+            </div>
+          ) : (
+            <div className="mt-2 flex items-center gap-2">
+              <h2 className="text-xl font-medium text-white">
+                {conversation.title}
+              </h2>
+              {isGroup && iAmAdmin && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNameDraft(conversation.title);
+                    setIsEditingName(true);
+                  }}
+                  className="rounded-full p-1.5 text-white/60 hover:bg-white/5 hover:text-white"
+                  aria-label="Edit group name"
+                >
+                  <Pencil className="size-4" />
+                </button>
               )}
-            >
-              {presence}
+            </div>
+          )}
+
+          {isGroup ? (
+            <p className="text-sm text-white/50">
+              Group · {conversation.memberCount} members
             </p>
+          ) : (
+            <>
+              {otherUser?.email && (
+                <p className="text-sm text-white/50">{otherUser.email}</p>
+              )}
+              {presence && (
+                <p
+                  className={cn(
+                    "text-sm",
+                    presence === "online" ? "text-[#00A884]" : "text-white/50",
+                  )}
+                >
+                  {presence}
+                </p>
+              )}
+            </>
+          )}
+          {actionError && (
+            <p className="text-sm text-red-300">{actionError}</p>
           )}
         </div>
+
+        {isGroup && (
+          <div className="mt-2 bg-[#111B21] px-4 py-4">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-sm text-white/60">
+                {conversation.memberCount} members
+              </p>
+              {iAmAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setShowAddMembers(true)}
+                  className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm text-[#00A884] transition-colors hover:bg-white/5"
+                >
+                  <UserPlus className="size-4" />
+                  Add
+                </button>
+              )}
+            </div>
+            {groupMembers === undefined ? (
+              <div className="flex justify-center py-6">
+                <Loader2 className="size-6 animate-spin text-[#00A884]" />
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {groupMembers.map((member) => {
+                  const isSelf = member._id === currentUserId;
+                  return (
+                    <div
+                      key={member._id}
+                      className="group/member flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-[#202c33]"
+                    >
+                      <UserAvatar
+                        name={member.name}
+                        imageUrl={member.profileImage}
+                        className="size-10"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium text-white">
+                          {isSelf ? "You" : member.name}
+                        </p>
+                        {member.email && (
+                          <p className="truncate text-sm text-white/50">
+                            {member.email}
+                          </p>
+                        )}
+                      </div>
+                      {member.role === "admin" && (
+                        <span className="flex shrink-0 items-center gap-1 rounded-full bg-[#00A884]/15 px-2 py-0.5 text-xs font-medium text-[#00A884]">
+                          <ShieldCheck className="size-3" />
+                          Admin
+                        </span>
+                      )}
+                      {iAmAdmin && !isSelf && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            aria-label={`Manage ${member.name}`}
+                            className="rounded-full p-1.5 text-white/60 opacity-0 transition-opacity hover:bg-white/10 hover:text-white group-hover/member:opacity-100 focus:opacity-100"
+                          >
+                            <MoreVertical className="size-4" />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" side="bottom">
+                            <DropdownMenuItem
+                              onClick={() =>
+                                void setGroupAdmin({
+                                  conversationId,
+                                  memberId: member._id,
+                                  isAdmin: member.role !== "admin",
+                                }).catch((err: unknown) =>
+                                  setActionError(
+                                    err instanceof Error
+                                      ? err.message
+                                      : "Failed to update admin",
+                                  ),
+                                )
+                              }
+                            >
+                              {member.role === "admin" ? (
+                                <Shield />
+                              ) : (
+                                <Crown />
+                              )}
+                              {member.role === "admin"
+                                ? "Dismiss as admin"
+                                : "Make admin"}
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onClick={() =>
+                                void removeGroupMember({
+                                  conversationId,
+                                  memberId: member._id,
+                                }).catch((err: unknown) =>
+                                  setActionError(
+                                    err instanceof Error
+                                      ? err.message
+                                      : "Failed to remove member",
+                                  ),
+                                )
+                              }
+                            >
+                              <UserMinus />
+                              Remove from group
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="mt-2 bg-[#111B21] px-4 py-4">
           <p className="mb-3 text-sm text-white/60">Shared media</p>
@@ -1348,7 +2197,183 @@ function ContactInfoPanel({
           )}
         </div>
       </div>
+
+      {showAddMembers && (
+        <AddMembersDialog
+          existingMemberIds={existingMemberIds}
+          onClose={() => setShowAddMembers(false)}
+          onAdd={async (memberIds) => {
+            try {
+              await addGroupMembers({ conversationId, memberIds });
+              setShowAddMembers(false);
+            } catch (err) {
+              setActionError(
+                err instanceof Error ? err.message : "Failed to add members",
+              );
+              setShowAddMembers(false);
+            }
+          }}
+        />
+      )}
     </aside>
+  );
+}
+
+function AddMembersDialog({
+  existingMemberIds,
+  onClose,
+  onAdd,
+}: {
+  existingMemberIds: Id<"users">[];
+  onClose: () => void;
+  onAdd: (memberIds: Id<"users">[]) => Promise<void>;
+}) {
+  const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [selected, setSelected] = useState<PublicUser[]>([]);
+  const [isAdding, setIsAdding] = useState(false);
+
+  const results = useQuery(
+    api.users.search,
+    debouncedQuery.length > 0 ? { query: debouncedQuery } : "skip",
+  );
+
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebouncedQuery(query), 250);
+    return () => clearTimeout(timeout);
+  }, [query]);
+
+  const existing = new Set(existingMemberIds);
+
+  const toggleUser = (user: PublicUser) => {
+    setSelected((prev) =>
+      prev.some((u) => u._id === user._id)
+        ? prev.filter((u) => u._id !== user._id)
+        : [...prev, user],
+    );
+  };
+
+  const handleAdd = async () => {
+    if (selected.length === 0) {
+      return;
+    }
+    setIsAdding(true);
+    await onAdd(selected.map((u) => u._id));
+    setIsAdding(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-4 pt-16">
+      <div className="flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-xl bg-[#111B21] shadow-2xl ring-1 ring-white/10">
+        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+          <h2 className="text-lg font-medium">Add members</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-1 text-white/70 hover:bg-white/5 hover:text-white"
+            aria-label="Close"
+          >
+            <X className="size-5" />
+          </button>
+        </div>
+
+        <div className="space-y-3 p-4">
+          {selected.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {selected.map((user) => (
+                <span
+                  key={user._id}
+                  className="flex items-center gap-1 rounded-full bg-[#2a3942] py-1 pr-1 pl-3 text-xs text-white"
+                >
+                  {user.name}
+                  <button
+                    type="button"
+                    onClick={() => toggleUser(user)}
+                    className="rounded-full p-0.5 text-white/60 hover:bg-white/10 hover:text-white"
+                    aria-label={`Remove ${user.name}`}
+                  >
+                    <X className="size-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <label className="relative block">
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-white/40" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search users by name or email"
+              autoFocus
+              className="w-full rounded-lg bg-[#202c33] py-2.5 pr-3 pl-10 text-sm text-white outline-none placeholder:text-white/40 focus:ring-1 focus:ring-[#00A884]/50"
+            />
+          </label>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto border-t border-white/10">
+          {query.trim().length === 0 ? (
+            <p className="px-4 py-6 text-sm text-white/50">
+              Search for people to add.
+            </p>
+          ) : results === undefined ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="size-6 animate-spin text-[#00A884]" />
+            </div>
+          ) : results.filter((u) => !existing.has(u._id)).length === 0 ? (
+            <p className="px-4 py-6 text-sm text-white/50">No users found.</p>
+          ) : (
+            results
+              .filter((u) => !existing.has(u._id))
+              .map((user) => {
+                const isSelected = selected.some((u) => u._id === user._id);
+                return (
+                  <button
+                    key={user._id}
+                    type="button"
+                    onClick={() => toggleUser(user)}
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[#202c33]"
+                  >
+                    <UserAvatar
+                      name={user.name}
+                      imageUrl={user.profileImage}
+                      className="size-10"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">{user.name}</p>
+                      {user.email && (
+                        <p className="truncate text-sm text-white/50">
+                          {user.email}
+                        </p>
+                      )}
+                    </div>
+                    <span
+                      className={cn(
+                        "flex size-5 shrink-0 items-center justify-center rounded-full border",
+                        isSelected
+                          ? "border-[#00A884] bg-[#00A884] text-white"
+                          : "border-white/30",
+                      )}
+                    >
+                      {isSelected && <Check className="size-3.5" />}
+                    </span>
+                  </button>
+                );
+              })
+          )}
+        </div>
+
+        <div className="flex items-center justify-between gap-3 border-t border-white/10 px-4 py-3">
+          <p className="text-sm text-white/40">{selected.length} selected</p>
+          <Button
+            className="bg-[#00A884] text-white hover:bg-[#06cf9c]"
+            onClick={() => void handleAdd()}
+            disabled={isAdding || selected.length === 0}
+          >
+            {isAdding ? <Loader2 className="size-4 animate-spin" /> : "Add"}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 

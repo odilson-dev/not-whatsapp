@@ -1,12 +1,17 @@
 import { paginationOptsValidator, paginationResultValidator } from "convex/server";
 import { v } from "convex/values";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { getCurrentUser } from "./lib/auth";
 import { getBlockStatus } from "./lib/blocks";
 import { upsertConversationState } from "./lib/conversationStates";
-import { getOtherMemberId } from "./lib/conversations";
+import {
+  assertConversationMember,
+  conversationKind,
+  getMemberIds,
+  isGroupAdmin,
+} from "./lib/members";
 
 const messageTypeValidator = v.union(v.literal("text"), v.literal("image"));
 
@@ -27,27 +32,19 @@ const messageValidator = v.object({
   imageUrl: v.optional(v.string()),
   createdAt: v.number(),
   forwarded: v.optional(v.boolean()),
+  mentions: v.optional(v.array(v.id("users"))),
   replyTo: v.optional(replyToValidator),
+  senderName: v.optional(v.string()),
+  senderImage: v.optional(v.string()),
 });
 
-async function assertConversationMember(
+async function otherDirectMemberId(
   ctx: QueryCtx | MutationCtx,
   conversationId: Id<"conversations">,
   userId: Id<"users">,
-) {
-  const conversation = await ctx.db.get("conversations", conversationId);
-  if (!conversation) {
-    throw new Error("Conversation not found");
-  }
-
-  if (
-    conversation.memberOneId !== userId &&
-    conversation.memberTwoId !== userId
-  ) {
-    throw new Error("Unauthorized");
-  }
-
-  return conversation;
+): Promise<Id<"users"> | undefined> {
+  const memberIds = await getMemberIds(ctx, conversationId);
+  return memberIds.find((id) => id !== userId);
 }
 
 export const list = query({
@@ -60,13 +57,31 @@ export const list = query({
     const user = await getCurrentUser(ctx);
     await assertConversationMember(ctx, args.conversationId, user._id);
 
-    return await ctx.db
+    const page = await ctx.db
       .query("messages")
       .withIndex("by_conversation", (q) =>
         q.eq("conversationId", args.conversationId),
       )
       .order("desc")
       .paginate(args.paginationOpts);
+
+    const senderCache = new Map<Id<"users">, Doc<"users"> | null>();
+    const enriched = await Promise.all(
+      page.page.map(async (message) => {
+        let sender = senderCache.get(message.senderId);
+        if (sender === undefined) {
+          sender = await ctx.db.get("users", message.senderId);
+          senderCache.set(message.senderId, sender);
+        }
+        return {
+          ...message,
+          senderName: sender?.name,
+          senderImage: sender?.profileImage,
+        };
+      }),
+    );
+
+    return { ...page, page: enriched };
   },
 });
 
@@ -153,6 +168,7 @@ export const send = mutation({
     text: v.optional(v.string()),
     imageStorageId: v.optional(v.id("_storage")),
     replyToId: v.optional(v.id("messages")),
+    mentions: v.optional(v.array(v.id("users"))),
   },
   returns: v.id("messages"),
   handler: async (ctx, args) => {
@@ -163,8 +179,26 @@ export const send = mutation({
       user._id,
     );
 
-    const otherUserId = getOtherMemberId(conversation, user._id);
-    await assertNotBlocked(ctx, user._id, otherUserId);
+    if (conversationKind(conversation) === "direct") {
+      const otherUserId = await otherDirectMemberId(
+        ctx,
+        args.conversationId,
+        user._id,
+      );
+      if (otherUserId) {
+        await assertNotBlocked(ctx, user._id, otherUserId);
+      }
+    }
+
+    // Only keep mentions that are actual members of this conversation.
+    let mentions: Id<"users">[] | undefined;
+    if (args.mentions && args.mentions.length > 0) {
+      const memberIds = new Set(await getMemberIds(ctx, args.conversationId));
+      const valid = Array.from(new Set(args.mentions)).filter((id) =>
+        memberIds.has(id),
+      );
+      mentions = valid.length > 0 ? valid : undefined;
+    }
 
     let type: "text" | "image";
     let text: string | undefined;
@@ -211,6 +245,7 @@ export const send = mutation({
       imageUrl,
       createdAt,
       replyTo,
+      mentions,
     });
 
     await afterMessageSent(ctx, user._id, args.conversationId, type, text, createdAt);
@@ -240,8 +275,16 @@ export const forward = mutation({
       user._id,
     );
 
-    const otherUserId = getOtherMemberId(targetConversation, user._id);
-    await assertNotBlocked(ctx, user._id, otherUserId);
+    if (conversationKind(targetConversation) === "direct") {
+      const otherUserId = await otherDirectMemberId(
+        ctx,
+        args.targetConversationId,
+        user._id,
+      );
+      if (otherUserId) {
+        await assertNotBlocked(ctx, user._id, otherUserId);
+      }
+    }
 
     const createdAt = Date.now();
 
@@ -286,6 +329,15 @@ export const remove = mutation({
       message.conversationId,
       user._id,
     );
+
+    // A message can be deleted by its author, or by a group admin.
+    const isOwn = message.senderId === user._id;
+    const canModerate =
+      conversationKind(conversation) === "group" &&
+      (await isGroupAdmin(ctx, message.conversationId, user._id));
+    if (!isOwn && !canModerate) {
+      throw new Error("You can only delete your own messages");
+    }
 
     await ctx.db.delete("messages", args.messageId);
 

@@ -19,15 +19,32 @@ export default defineSchema({
     .index("email", ["email"]),
 
   conversations: defineTable({
-    memberOneId: v.id("users"),
-    memberTwoId: v.id("users"),
+    // "direct" (1:1) or "group". Treated as "direct" when missing (legacy rows).
+    kind: v.optional(v.union(v.literal("direct"), v.literal("group"))),
+    // Group metadata (only set for groups).
+    name: v.optional(v.string()),
+    imageUrl: v.optional(v.string()),
+    createdBy: v.optional(v.id("users")),
+    // Only set for direct conversations; used for 1:1 dedup.
+    memberOneId: v.optional(v.id("users")),
+    memberTwoId: v.optional(v.id("users")),
     lastMessageAt: v.number(),
     lastMessagePreview: v.optional(v.string()),
     lastMessageType: v.optional(messageTypeValidator),
   })
-    .index("by_members", ["memberOneId", "memberTwoId"])
-    .index("by_member_one", ["memberOneId", "lastMessageAt"])
-    .index("by_member_two", ["memberTwoId", "lastMessageAt"]),
+    .index("by_members", ["memberOneId", "memberTwoId"]),
+
+  // Membership rows for both direct and group conversations. This is the
+  // source of truth for who belongs to a conversation.
+  conversationMembers: defineTable({
+    conversationId: v.id("conversations"),
+    userId: v.id("users"),
+    // Group role. Treated as "member" when missing.
+    role: v.optional(v.union(v.literal("admin"), v.literal("member"))),
+  })
+    .index("by_user", ["userId"])
+    .index("by_conversation", ["conversationId"])
+    .index("by_conversation_and_user", ["conversationId", "userId"]),
 
   messages: defineTable({
     conversationId: v.id("conversations"),
@@ -37,6 +54,8 @@ export default defineSchema({
     imageUrl: v.optional(v.string()),
     createdAt: v.number(),
     forwarded: v.optional(v.boolean()),
+    // User ids mentioned (@tagged) in this message.
+    mentions: v.optional(v.array(v.id("users"))),
     // Denormalized snapshot of the message being replied to, so the reply
     // still renders even if the original is later deleted.
     replyTo: v.optional(
