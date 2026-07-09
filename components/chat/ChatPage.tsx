@@ -1558,7 +1558,7 @@ function MessagePanel({
             showContactInfo && "hidden md:flex",
           )}
         >
-          <header className="flex items-center gap-3 border-b border-border bg-[var(--card)] px-4 py-3">
+          <header className="flex h-16 shrink-0 items-center gap-3 border-b border-border bg-[var(--card)] px-4">
             {onBack && (
               <Button
                 variant="ghost"
@@ -2225,7 +2225,7 @@ function ContactInfoPanel({
 
   return (
     <aside className="flex h-full w-full min-w-0 flex-col border-l border-border bg-[var(--background)] md:w-[380px] md:shrink-0">
-      <header className="flex items-center gap-4 border-b border-border bg-[var(--card)] px-4 py-3">
+      <header className="flex h-16 shrink-0 items-center gap-4 border-b border-border bg-[var(--card)] px-4">
         <button
           type="button"
           onClick={onClose}
@@ -2246,7 +2246,7 @@ function ContactInfoPanel({
               className="size-40"
               group={isGroup}
               online={isGroup ? undefined : presence === "online"}
-              statusClassName="size-6 border-4 border-[var(--background)]"
+              statusClassName="right-3 bottom-3 size-6 border-4 border-[var(--background)]"
             />
             {isGroup && iAmAdmin && (
               <button
