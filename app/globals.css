@@ -133,3 +133,62 @@
     @apply bg-background text-foreground font-sans;
   }
 }
+
+/* Landing page: soft doodle texture + gentle entrance motion */
+.landing-doodle {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Cg fill='none' stroke='%23ffffff' stroke-width='1.2' stroke-linecap='round'%3E%3Cpath d='M18 22c6-8 14-6 16 2'/%3E%3Ccircle cx='58' cy='20' r='5'/%3E%3Cpath d='M12 52h14M19 45v14'/%3E%3Cpath d='M48 48c8 2 14 10 8 16'/%3E%3Cpath d='M62 58l6 6M68 58l-6 6'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 80px 80px;
+}
+
+@keyframes landing-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes landing-bubble-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.landing-fade-up {
+  animation: landing-fade-up 0.7s ease-out both;
+}
+
+.landing-delay-1 {
+  animation-delay: 80ms;
+}
+.landing-delay-2 {
+  animation-delay: 160ms;
+}
+.landing-delay-3 {
+  animation-delay: 240ms;
+}
+.landing-delay-4 {
+  animation-delay: 320ms;
+}
+.landing-delay-5 {
+  animation-delay: 400ms;
+}
+
+.landing-bubble {
+  animation: landing-bubble-in 0.55s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-fade-up,
+  .landing-bubble {
+    animation: none;
+  }
+}
