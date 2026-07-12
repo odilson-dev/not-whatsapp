@@ -128,6 +128,8 @@ const publicUserValidator = v.object({
   profileImage: v.optional(v.string()),
 });
 
+const ONLINE_THRESHOLD_MS = 60_000;
+
 export const search = query({
   args: {
     query: v.string(),
@@ -148,12 +150,48 @@ export const search = query({
         if (candidate._id === user._id) {
           return false;
         }
+        if (candidate.isBanned === true) {
+          return false;
+        }
 
         return (
           candidate.name.toLowerCase().includes(searchTerm) ||
           candidate.email?.toLowerCase().includes(searchTerm) === true
         );
       })
+      .slice(0, 20)
+      .map((candidate) => ({
+        _id: candidate._id,
+        name: candidate.name,
+        email: candidate.email,
+        profileImage: candidate.profileImage,
+      }));
+  },
+});
+
+export const listOnline = query({
+  args: {
+    now: v.number(),
+  },
+  returns: v.array(publicUserValidator),
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    const threshold = args.now - ONLINE_THRESHOLD_MS;
+    const users = await ctx.db.query("users").collect();
+
+    return users
+      .filter((candidate) => {
+        if (candidate._id === user._id) {
+          return false;
+        }
+        if (candidate.isBanned === true) {
+          return false;
+        }
+        return (
+          candidate.lastSeen !== undefined && candidate.lastSeen >= threshold
+        );
+      })
+      .sort((a, b) => (b.lastSeen ?? 0) - (a.lastSeen ?? 0))
       .slice(0, 20)
       .map((candidate) => ({
         _id: candidate._id,

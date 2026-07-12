@@ -5,10 +5,47 @@ import type { Id } from "@/convex/_generated/dataModel";
 import { Loader2, Search, X } from "lucide-react";
 import type { PublicUser } from "./types";
 
+function UserRow({
+  user,
+  online,
+  isLoading,
+  onSelect,
+}: {
+  user: PublicUser;
+  online?: boolean;
+  isLoading: boolean;
+  onSelect: (userId: Id<"users">) => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={isLoading}
+      onClick={() => onSelect(user._id)}
+      className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--card)] disabled:opacity-60"
+    >
+      <UserAvatar
+        name={user.name}
+        imageUrl={user.profileImage}
+        className="size-10"
+        online={online}
+      />
+      <div className="min-w-0">
+        <p className="truncate font-medium">{user.name}</p>
+        {online ? (
+          <p className="truncate text-sm text-[#00A884]">Online</p>
+        ) : user.email ? (
+          <p className="truncate text-sm text-foreground/50">{user.email}</p>
+        ) : null}
+      </div>
+    </button>
+  );
+}
+
 export function NewChatDialog({
   query,
   onQueryChange,
   results,
+  onlineUsers,
   isLoading,
   onClose,
   onSelectUser,
@@ -16,15 +53,18 @@ export function NewChatDialog({
   query: string;
   onQueryChange: (value: string) => void;
   results: PublicUser[] | undefined;
+  onlineUsers: PublicUser[] | undefined;
   isLoading: boolean;
   onClose: () => void;
   onSelectUser: (userId: Id<"users">) => void;
 }) {
+  const isSearching = query.trim().length > 0;
+
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-4 pt-16">
       <div className="w-full max-w-md overflow-hidden rounded-xl bg-[var(--background)] shadow-2xl ring-1 ring-border">
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <h2 className="text-lg font-medium">New chat</h2>
+          <h2 className="text-lg font-medium">Bother somebody</h2>
           <button
             type="button"
             onClick={onClose}
@@ -49,10 +89,31 @@ export function NewChatDialog({
         </div>
 
         <div className="max-h-80 overflow-y-auto border-t border-border">
-          {query.trim().length === 0 ? (
-            <p className="px-4 py-6 text-sm text-foreground/50">
-              Type to find someone to chat with.
-            </p>
+          {!isSearching ? (
+            onlineUsers === undefined ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="size-6 animate-spin text-[#00A884]" />
+              </div>
+            ) : onlineUsers.length === 0 ? (
+              <p className="px-4 py-6 text-sm text-foreground/50">
+                Nobody&apos;s online right now — search for someone to bother.
+              </p>
+            ) : (
+              <>
+                <p className="px-4 pt-3 pb-1 text-xs font-medium tracking-wide text-foreground/45 uppercase">
+                  Online now
+                </p>
+                {onlineUsers.map((user) => (
+                  <UserRow
+                    key={user._id}
+                    user={user}
+                    online
+                    isLoading={isLoading}
+                    onSelect={onSelectUser}
+                  />
+                ))}
+              </>
+            )
           ) : results === undefined ? (
             <div className="flex justify-center py-8">
               <Loader2 className="size-6 animate-spin text-[#00A884]" />
@@ -63,27 +124,12 @@ export function NewChatDialog({
             </p>
           ) : (
             results.map((user) => (
-              <button
+              <UserRow
                 key={user._id}
-                type="button"
-                disabled={isLoading}
-                onClick={() => onSelectUser(user._id)}
-                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--card)] disabled:opacity-60"
-              >
-                <UserAvatar
-                  name={user.name}
-                  imageUrl={user.profileImage}
-                  className="size-10"
-                />
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{user.name}</p>
-                  {user.email && (
-                    <p className="truncate text-sm text-foreground/50">
-                      {user.email}
-                    </p>
-                  )}
-                </div>
-              </button>
+                user={user}
+                isLoading={isLoading}
+                onSelect={onSelectUser}
+              />
             ))
           )}
         </div>

@@ -1,8 +1,8 @@
 "use client";
 
-import { SIGN_IN_PATH } from "@/components/auth/auth-utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Modal } from "@/components/admin/Modal";
+import { SIGN_IN_PATH } from "@/components/auth/auth-utils";
 import { MediaView } from "@/components/chat/MediaView";
 import { NavRail, type ChatSection } from "@/components/chat/NavRail";
 import { SettingsView } from "@/components/chat/SettingsView";
@@ -27,7 +27,7 @@ import {
   ListChecks,
   Loader2,
   LogOut,
-  MessageSquare,
+  MessageSquarePlus,
   MoreVertical,
   Search,
   Trash2,
@@ -96,7 +96,8 @@ export function ChatPage() {
   const statusOverview = useQuery(
     api.status.listActive,
     isAuthenticated ? { now } : "skip",
-  );  const hasStatusUpdates =
+  );
+  const hasStatusUpdates =
     statusOverview?.others.some((bucket) => bucket.hasUnviewed) ?? false;
   const [selectedConversationId, setSelectedConversationId] =
     useState<Id<"conversations"> | null>(null);
@@ -119,6 +120,11 @@ export function ChatPage() {
     isAuthenticated && debouncedNewChatQuery.length > 0
       ? { query: debouncedNewChatQuery }
       : "skip",
+  );
+
+  const onlineUsers = useQuery(
+    api.users.listOnline,
+    isAuthenticated && showNewChat ? { now } : "skip",
   );
 
   useEffect(() => {
@@ -276,9 +282,7 @@ export function ChatPage() {
         unreadChats={counts.unread}
         hasStatusUpdates={hasStatusUpdates}
         className={cn(
-          activeSection === "chats" &&
-            openConversationId &&
-            "hidden md:flex",
+          activeSection === "chats" && openConversationId && "hidden md:flex",
         )}
       />
       {activeSection === "chats" && (
@@ -344,19 +348,19 @@ export function ChatPage() {
                 <button
                   type="button"
                   onClick={() => setShowNewChat(true)}
-                  className="rounded-full p-2 text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
+                  className="rounded-full cursor-pointer p-2 text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
                   aria-label="New chat"
                 >
-                  <MessageSquare className="size-5" />
+                  <MessageSquarePlus className="size-5" />
                 </button>
                 <ThemeToggle
                   bare
-                  className="rounded-full p-2 text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
+                  className="rounded-full cursor-pointer p-2 text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
                 />
                 <DropdownMenu>
                   <DropdownMenuTrigger
                     aria-label="Menu"
-                    className="rounded-full p-2 text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
+                    className="rounded-full cursor-pointer p-2 text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
                   >
                     <MoreVertical className="size-5" />
                   </DropdownMenuTrigger>
@@ -372,7 +376,9 @@ export function ChatPage() {
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       variant="destructive"
-                      onClick={() => void signOut({ redirectUrl: SIGN_IN_PATH })}
+                      onClick={() =>
+                        void signOut({ redirectUrl: SIGN_IN_PATH })
+                      }
                     >
                       <LogOut />
                       Log out
@@ -466,8 +472,7 @@ export function ChatPage() {
                   key={conversation._id}
                   conversation={conversation}
                   isSelected={
-                    !selectionMode &&
-                    openConversationId === conversation._id
+                    !selectionMode && openConversationId === conversation._id
                   }
                   isOnline={
                     conversation.kind === "direct" &&
@@ -498,7 +503,7 @@ export function ChatPage() {
               onDeleted={() => setSelectedConversationId(null)}
             />
           ) : (
-            <EmptyChatState />
+            <EmptyChatState onNewChat={() => setShowNewChat(true)} />
           )}
         </section>
       )}
@@ -528,6 +533,7 @@ export function ChatPage() {
           query={newChatQuery}
           onQueryChange={setNewChatQuery}
           results={searchResults}
+          onlineUsers={onlineUsers}
           isLoading={isStartingChat}
           onClose={() => {
             setShowNewChat(false);

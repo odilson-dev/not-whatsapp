@@ -70,15 +70,15 @@ export default function Home() {
             </p>
 
             <p className="landing-fade-up landing-delay-3 mx-auto max-w-md text-base text-white/80 sm:text-lg lg:mx-0">
-              Real-time chats with the people you care about — warm, simple, and
-              always ready when you are.
+              It&apos;s like WhatsApp, but it&apos;s not... You know what we
+              mean 😉 A friendly, simple place to chat.
             </p>
 
             <div className="landing-fade-up landing-delay-4 flex flex-col items-center justify-center gap-3 pt-1 sm:flex-row lg:justify-start">
               <Link href="/sign-up">
                 <Button
                   size="lg"
-                  className="w-full rounded-full bg-white px-8 text-[#008069] shadow-md transition-transform hover:scale-[1.02] hover:bg-white/95 sm:w-auto dark:bg-[#202c33] dark:text-white dark:hover:bg-[#2a3942]"
+                  className="w-full cursor-pointer rounded-full bg-white px-8 text-[#008069] shadow-md transition-transform hover:scale-[1.02] hover:bg-white/95 sm:w-auto dark:bg-[#202c33] dark:text-white dark:hover:bg-[#2a3942]"
                 >
                   Start chatting
                 </Button>
@@ -87,7 +87,7 @@ export default function Home() {
                 <Button
                   size="lg"
                   variant="outline"
-                  className="w-full rounded-full border-white/35 bg-transparent px-8 text-white transition-colors hover:bg-white/10 sm:w-auto"
+                  className="w-full cursor-pointer rounded-full border-white/35 bg-transparent px-8 text-white transition-colors hover:bg-white/10 sm:w-auto"
                 >
                   Welcome back
                 </Button>
@@ -122,7 +122,9 @@ export default function Home() {
                   NW
                 </div>
                 <div className="text-left">
-                  <p className="text-sm font-semibold text-white">Welcome chat</p>
+                  <p className="text-sm font-semibold text-white">
+                    Welcome chat
+                  </p>
                   <p className="text-xs text-white/60">online · say hello</p>
                 </div>
               </div>

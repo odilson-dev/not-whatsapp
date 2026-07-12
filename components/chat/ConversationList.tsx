@@ -20,7 +20,7 @@ import {
   Check,
   CheckCheck,
   LogOut,
-  MessageSquare,
+  MessageSquarePlus,
   MoreVertical,
   Pin,
   PinOff,
@@ -304,18 +304,23 @@ export function ConversationActionsMenu({
   );
 }
 
-export function EmptyChatState() {
+export function EmptyChatState({ onNewChat }: { onNewChat: () => void }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center bg-[var(--card)] text-center">
       <div className="mb-6 rounded-full bg-[var(--card)] p-8">
-        <MessageSquare className="size-16 text-foreground/20" />
+        <MessageSquarePlus className="size-16 text-foreground/20" />
       </div>
-      <h2 className="text-2xl font-light text-foreground/90">
-        Not Whatsapp Web
-      </h2>
-      <p className="mt-3 max-w-sm text-sm text-foreground/50">
-        Select a chat from the sidebar to start messaging.
+
+      <p className="mt-3 max-w-sm text-base text-foreground/50">
+        Where your aunty comes to gossip .
       </p>
+      <button
+        type="button"
+        onClick={onNewChat}
+        className="mt-8 cursor-pointer text-white rounded-lg bg-[#00A884] px-6 py-2.5 text-sm font-semibold  transition-colors hover:bg-[#06CF9C]"
+      >
+        Bother Somebody
+      </button>
     </div>
   );
 }
