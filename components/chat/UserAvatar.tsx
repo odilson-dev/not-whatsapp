@@ -31,8 +31,8 @@ export function UserAvatar({
         <span
           aria-label={online ? "online" : "offline"}
           className={cn(
-            "absolute right-0 bottom-0 size-3 rounded-full border-2 border-[#111B21]",
-            online ? "bg-[#00D95F]" : "bg-gray-400",
+            "absolute right-0 bottom-0 size-3 rounded-full border-2 border-background",
+            online ? "bg-[#00D95F]" : "bg-muted-foreground",
             statusClassName,
           )}
         />

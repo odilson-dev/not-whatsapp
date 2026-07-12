@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" fill="none">
+  <rect width="1200" height="675" fill="#111B21"/>
+  <rect x="0" y="0" width="380" height="675" fill="#202C33"/>
+  <rect x="0" y="0" width="380" height="56" fill="#202C33"/>
+  <text x="24" y="36" fill="#E9EDEF" font-family="system-ui,sans-serif" font-size="20" font-weight="600">Not Whatsapp</text>
+  <rect x="16" y="72" width="348" height="36" rx="8" fill="#2A3942"/>
+  <text x="40" y="95" fill="#8696A0" font-family="system-ui,sans-serif" font-size="14">Search</text>
+  <circle cx="52" cy="148" r="22" fill="#00A884"/>
+  <text x="88" y="144" fill="#E9EDEF" font-family="system-ui,sans-serif" font-size="15" font-weight="600">Alice</text>
+  <text x="88" y="164" fill="#8696A0" font-family="system-ui,sans-serif" font-size="13">Hey, are we still on for tonight?</text>
+  <circle cx="52" cy="208" r="22" fill="#53BDEB"/>
+  <text x="88" y="204" fill="#E9EDEF" font-family="system-ui,sans-serif" font-size="15" font-weight="600">Design Team</text>
+  <text x="88" y="224" fill="#8696A0" font-family="system-ui,sans-serif" font-size="13">Photo</text>
+  <circle cx="52" cy="268" r="22" fill="#E67E22"/>
+  <text x="88" y="264" fill="#E9EDEF" font-family="system-ui,sans-serif" font-size="15" font-weight="600">Bob</text>
+  <text x="88" y="284" fill="#8696A0" font-family="system-ui,sans-serif" font-size="13">Sounds good =M</text>
+  <rect x="380" y="0" width="820" height="675" fill="#0B141A"/>
+  <text x="600" y="320" text-anchor="middle" fill="#8696A0" font-family="system-ui,sans-serif" font-size="28" font-weight="300">Not Whatsapp Web</text>
+  <text x="600" y="360" text-anchor="middle" fill="#667781" font-family="system-ui,sans-serif" font-size="15">Select a chat from the sidebar to start messaging.</text>
+</svg>
