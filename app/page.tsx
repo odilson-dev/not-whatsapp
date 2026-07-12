@@ -1,11 +1,6 @@
 import { Button } from "@/components/ui/button";
+import { Shield, Users, Zap } from "lucide-react";
 import Link from "next/link";
-import {
-  MessageSquare,
-  Shield,
-  Users,
-  Zap,
-} from "lucide-react";
 
 const features = [
   {
@@ -30,11 +25,6 @@ export default function Home() {
     <main className="flex min-h-screen flex-col bg-[#00A884] dark:bg-[#111B21] text-white">
       <div className="flex flex-1 flex-col items-center justify-center px-4 py-16">
         <div className="mx-auto max-w-2xl text-center space-y-6">
-          <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-1.5 text-sm font-medium text-white/90">
-            <MessageSquare className="size-4" />
-            Portfolio project
-          </div>
-
           <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
             Not WhatsApp
           </h1>
@@ -45,14 +35,26 @@ export default function Home() {
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-            <Link href="/chat">
+            <Link href="/sign-up">
               <Button
                 size="lg"
                 className="w-full sm:w-auto bg-white rounded-sm text-[#00A884] hover:bg-gray-100 dark:bg-[#202c33] dark:text-white dark:hover:bg-[#2a3942]"
               >
-                Start chatting
+                Sign up
               </Button>
             </Link>
+            <Link href="/sign-in">
+              <Button
+                size="lg"
+                variant="outline"
+                className="w-full sm:w-auto border-white/30 bg-transparent text-white hover:bg-white/10"
+              >
+                Sign in
+              </Button>
+            </Link>
+          </div>
+
+          <p className="pt-2 text-sm text-white/70">
             <a
               href={
                 process.env.NEXT_PUBLIC_GITHUB_URL ??
@@ -60,16 +62,11 @@ export default function Home() {
               }
               target="_blank"
               rel="noopener noreferrer"
+              className="underline-offset-4 hover:underline"
             >
-              <Button
-                size="lg"
-                variant="outline"
-                className="w-full sm:w-auto border-white/30 bg-transparent text-white hover:bg-white/10"
-              >
-                View source
-              </Button>
+              View source
             </a>
-          </div>
+          </p>
         </div>
       </div>
 
@@ -82,7 +79,9 @@ export default function Home() {
             >
               <feature.icon className="mx-auto sm:mx-0 size-8 text-white/90 mb-3" />
               <h2 className="font-semibold text-lg">{feature.title}</h2>
-              <p className="mt-1 text-sm text-white/70">{feature.description}</p>
+              <p className="mt-1 text-sm text-white/70">
+                {feature.description}
+              </p>
             </div>
           ))}
         </div>
