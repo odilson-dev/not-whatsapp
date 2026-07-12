@@ -53,8 +53,13 @@ export function ChatPage() {
   const { isAuthenticated, isLoading: isAuthLoading } = useConvexAuth();
   const authArgs = isAuthenticated ? {} : "skip";
 
+  // `users.me` returns null until StoreUserInDatabase inserts the row.
+  // Other queries call getCurrentUser and throw if the row is missing —
+  // wait for the profile before subscribing.
   const currentUser = useQuery(api.users.me, authArgs);
-  const conversations = useQuery(api.conversations.list, authArgs);
+  const readyArgs = currentUser ? {} : "skip";
+
+  const conversations = useQuery(api.conversations.list, readyArgs);
   const getOrCreateConversation = useMutation(api.conversations.getOrCreate);
   const markRead = useMutation(api.conversations.markRead);
   const heartbeat = useMutation(api.users.heartbeat);
@@ -66,7 +71,7 @@ export function ChatPage() {
   }, [isAuthLoading, isAuthenticated, router]);
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!currentUser) {
       return;
     }
 
@@ -87,7 +92,7 @@ export function ChatPage() {
       clearInterval(interval);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [heartbeat, isAuthenticated]);
+  }, [heartbeat, currentUser]);
 
   const now = useNow(30000);
   const { signOut } = useClerk();
@@ -95,7 +100,7 @@ export function ChatPage() {
   const [activeSection, setActiveSection] = useState<ChatSection>("chats");
   const statusOverview = useQuery(
     api.status.listActive,
-    isAuthenticated ? { now } : "skip",
+    currentUser ? { now } : "skip",
   );
   const hasStatusUpdates =
     statusOverview?.others.some((bucket) => bucket.hasUnviewed) ?? false;
@@ -117,14 +122,14 @@ export function ChatPage() {
 
   const searchResults = useQuery(
     api.users.search,
-    isAuthenticated && debouncedNewChatQuery.length > 0
+    currentUser && debouncedNewChatQuery.length > 0
       ? { query: debouncedNewChatQuery }
       : "skip",
   );
 
   const onlineUsers = useQuery(
     api.users.listOnline,
-    isAuthenticated && showNewChat ? { now } : "skip",
+    currentUser && showNewChat ? { now } : "skip",
   );
 
   useEffect(() => {

@@ -1,3 +1,4 @@
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { HeartHandshake, MessageCircleHeart, Sparkles } from "lucide-react";
 import Link from "next/link";
@@ -53,6 +54,10 @@ export default function Home() {
         aria-hidden
         className="landing-doodle pointer-events-none absolute inset-0 opacity-[0.07] dark:opacity-[0.05]"
       />
+
+      <div className="absolute right-4 top-4 z-20">
+        <ThemeToggle className="bg-white/15 text-white ring-white/25 hover:bg-white/25 hover:text-white dark:bg-white/10 dark:ring-white/15" />
+      </div>
 
       <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-4 py-16 md:py-20">
         <div className="mx-auto flex w-full max-w-5xl flex-col items-center gap-12 lg:flex-row lg:items-center lg:justify-between lg:gap-16">

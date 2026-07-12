@@ -12,16 +12,75 @@ import {
 } from "@/components/auth/auth-utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { useAuth, useSignUp } from "@clerk/nextjs";
+import { Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+
+function PasswordField({
+  id,
+  name,
+  label,
+  placeholder,
+  autoComplete,
+  error,
+  visible,
+  onToggleVisibility,
+}: {
+  id: string;
+  name: string;
+  label: string;
+  placeholder: string;
+  autoComplete: string;
+  error?: string;
+  visible: boolean;
+  onToggleVisibility: () => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <label htmlFor={id} className="text-sm font-medium">
+        {label}
+      </label>
+      <div className="relative">
+        <Input
+          id={id}
+          name={name}
+          type={visible ? "text" : "password"}
+          autoComplete={autoComplete}
+          required
+          placeholder={placeholder}
+          minLength={8}
+          aria-invalid={Boolean(error)}
+          className="pr-10"
+        />
+        <button
+          type="button"
+          onClick={onToggleVisibility}
+          aria-label={visible ? "Hide password" : "Show password"}
+          title={visible ? "Hide password" : "Show password"}
+          className={cn(
+            "absolute top-1/2 right-2 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors",
+            "hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+          )}
+        >
+          {visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+        </button>
+      </div>
+      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+    </div>
+  );
+}
 
 export function SignUpForm() {
   const { isSignedIn } = useAuth();
   const { signUp, errors, fetchStatus } = useSignUp();
   const router = useRouter();
   const [formError, setFormError] = useState<string | undefined>();
+  const [confirmError, setConfirmError] = useState<string | undefined>();
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
     if (isSignedIn) {
@@ -38,10 +97,17 @@ export function SignUpForm() {
 
   const handleSubmit = async (formData: FormData) => {
     setFormError(undefined);
+    setConfirmError(undefined);
     const firstName = String(formData.get("firstName") ?? "").trim();
     const lastName = String(formData.get("lastName") ?? "").trim();
     const emailAddress = String(formData.get("email") ?? "").trim();
     const password = String(formData.get("password") ?? "");
+    const confirmPassword = String(formData.get("confirmPassword") ?? "");
+
+    if (password !== confirmPassword) {
+      setConfirmError("Passwords do not match");
+      return;
+    }
 
     const { error } = await signUp.password({
       firstName,
@@ -257,24 +323,27 @@ export function SignUpForm() {
             ) : null}
           </div>
 
-          <div className="space-y-1.5">
-            <label htmlFor="password" className="text-sm font-medium">
-              Password
-            </label>
-            <Input
-              id="password"
-              name="password"
-              type="password"
-              autoComplete="new-password"
-              required
-              placeholder="Create a password"
-              minLength={8}
-              aria-invalid={Boolean(passwordError)}
-            />
-            {passwordError ? (
-              <p className="text-sm text-destructive">{passwordError}</p>
-            ) : null}
-          </div>
+          <PasswordField
+            id="password"
+            name="password"
+            label="Password"
+            placeholder="Create a password"
+            autoComplete="new-password"
+            error={passwordError}
+            visible={showPassword}
+            onToggleVisibility={() => setShowPassword((v) => !v)}
+          />
+
+          <PasswordField
+            id="confirmPassword"
+            name="confirmPassword"
+            label="Confirm password"
+            placeholder="Confirm your password"
+            autoComplete="new-password"
+            error={confirmError}
+            visible={showConfirmPassword}
+            onToggleVisibility={() => setShowConfirmPassword((v) => !v)}
+          />
 
           {topError ? (
             <p className="text-sm text-destructive" role="alert">
