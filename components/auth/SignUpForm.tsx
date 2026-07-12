@@ -351,6 +351,9 @@ export function SignUpForm() {
             </p>
           ) : null}
 
+          {/* Required for custom sign-up: Clerk bot protection mounts here */}
+          <div id="clerk-captcha" />
+
           <Button
             type="submit"
             size="lg"
