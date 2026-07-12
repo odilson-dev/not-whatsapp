@@ -149,6 +149,10 @@ pnpm lint       # ESLint
 pnpm typecheck  # TypeScript check
 ```
 
+## Contributing
+
+Want to fix a bug or hit an error while setting up? See **[CONTRIBUTING.md](CONTRIBUTING.md)** for local setup, PR guidelines, and a troubleshooting table for common Clerk / Convex / Next.js issues.
+
 ## License
 
-MIT — portfolio / educational use.
+MIT — see [LICENSE](LICENSE). You may reuse, modify, and share this project freely.
