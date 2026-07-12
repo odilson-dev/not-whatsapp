@@ -9,6 +9,14 @@ type RouterLike = {
 
 export const AFTER_AUTH_PATH = "/chat";
 export const SSO_CALLBACK_PATH = "/sso-callback";
+export const SIGN_IN_PATH = "/sign-in";
+
+export function absoluteUrl(path: string): string {
+  if (typeof window === "undefined") {
+    return path;
+  }
+  return new URL(path, window.location.origin).toString();
+}
 
 export function navigateAfterAuth(
   router: RouterLike,

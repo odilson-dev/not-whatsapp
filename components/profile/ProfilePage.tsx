@@ -1,16 +1,20 @@
 "use client";
 
+import { SIGN_IN_PATH } from "@/components/auth/auth-utils";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
-import { useMutation, useQuery } from "convex/react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { ArrowLeft, Camera, Loader2, Pencil, User } from "lucide-react";
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 
 export function ProfilePage() {
-  const user = useQuery(api.users.me);
+  const router = useRouter();
+  const { isAuthenticated, isLoading: isAuthLoading } = useConvexAuth();
+  const user = useQuery(api.users.me, isAuthenticated ? {} : "skip");
   const generateUploadUrl = useMutation(api.users.generateUploadUrl);
   const updateProfile = useMutation(api.users.updateProfile);
 
@@ -21,7 +25,21 @@ export function ProfilePage() {
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (user === undefined) {
+  useEffect(() => {
+    if (!isAuthLoading && !isAuthenticated) {
+      router.replace(SIGN_IN_PATH);
+    }
+  }, [isAuthLoading, isAuthenticated, router]);
+
+  if (isAuthLoading || !isAuthenticated || user === undefined) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[var(--background)] text-foreground">
+        <Loader2 className="size-8 animate-spin text-[#00A884]" />
+      </div>
+    );
+  }
+
+  if (user === null) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[var(--background)] text-foreground">
         <Loader2 className="size-8 animate-spin text-[#00A884]" />

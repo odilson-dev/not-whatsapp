@@ -2,7 +2,7 @@
 
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { api } from "@/convex/_generated/api";
-import { UserButton, useAuth } from "@clerk/nextjs";
+import { useAuth } from "@clerk/nextjs";
 import { useQuery } from "convex/react";
 import { ShieldAlert } from "lucide-react";
 import Link from "next/link";
@@ -44,16 +44,13 @@ export function AuthHeader() {
   // shortcut here (when applicable).
   if (onChat) {
     if (!adminLink) return null;
-    return (
-      <header className="fixed bottom-4 right-4 z-50">{adminLink}</header>
-    );
+    return <header className="fixed bottom-4 right-4 z-50">{adminLink}</header>;
   }
 
   return (
     <header className="fixed right-4 top-4 z-50 flex items-center gap-3">
       <ThemeToggle />
       {adminLink}
-      <UserButton />
     </header>
   );
 }

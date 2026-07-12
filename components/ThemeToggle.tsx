@@ -42,7 +42,7 @@ export function ThemeToggle({
       className={cn(
         bare
           ? "[&_svg]:size-5"
-          : "flex size-9 items-center justify-center rounded-full bg-muted text-muted-foreground shadow-sm ring-1 ring-foreground/10 transition-colors hover:bg-muted/70 hover:text-foreground [&_svg]:size-5",
+          : "flex size-9 items-center cursor-pointer justify-center rounded-full bg-muted text-muted-foreground shadow-sm ring-1 ring-foreground/10 transition-colors hover:bg-muted/70 hover:text-foreground [&_svg]:size-5",
         className,
       )}
     >
@@ -65,10 +65,7 @@ export function ThemeSegmentedControl({ className }: { className?: string }) {
 
   return (
     <div
-      className={cn(
-        "flex gap-1 rounded-lg bg-muted p-1",
-        className,
-      )}
+      className={cn("flex gap-1 rounded-lg bg-muted p-1", className)}
       role="radiogroup"
       aria-label="Theme"
     >

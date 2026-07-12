@@ -1,5 +1,6 @@
 "use client";
 
+import { SIGN_IN_PATH } from "@/components/auth/auth-utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Modal } from "@/components/admin/Modal";
 import { MediaView } from "@/components/chat/MediaView";
@@ -18,7 +19,7 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { cn } from "@/lib/utils";
 import { useClerk } from "@clerk/nextjs";
-import { useMutation, useQuery } from "convex/react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import {
   Archive,
   ArrowLeft,
@@ -33,6 +34,7 @@ import {
   Users,
   X,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   ConversationListItem,
@@ -47,13 +49,27 @@ import { ONLINE_THRESHOLD_MS, type FilterKey } from "./types";
 
 /** Main chat shell: sidebar, message panel, and section routing (status, media, settings). */
 export function ChatPage() {
-  const currentUser = useQuery(api.users.me);
-  const conversations = useQuery(api.conversations.list);
+  const router = useRouter();
+  const { isAuthenticated, isLoading: isAuthLoading } = useConvexAuth();
+  const authArgs = isAuthenticated ? {} : "skip";
+
+  const currentUser = useQuery(api.users.me, authArgs);
+  const conversations = useQuery(api.conversations.list, authArgs);
   const getOrCreateConversation = useMutation(api.conversations.getOrCreate);
   const markRead = useMutation(api.conversations.markRead);
   const heartbeat = useMutation(api.users.heartbeat);
 
   useEffect(() => {
+    if (!isAuthLoading && !isAuthenticated) {
+      router.replace(SIGN_IN_PATH);
+    }
+  }, [isAuthLoading, isAuthenticated, router]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+
     void heartbeat();
     const interval = setInterval(() => {
       if (document.visibilityState === "visible") {
@@ -71,14 +87,16 @@ export function ChatPage() {
       clearInterval(interval);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [heartbeat]);
+  }, [heartbeat, isAuthenticated]);
 
   const now = useNow(30000);
   const { signOut } = useClerk();
   const removeConversation = useMutation(api.conversations.remove);
   const [activeSection, setActiveSection] = useState<ChatSection>("chats");
-  const statusOverview = useQuery(api.status.listActive, { now });
-  const hasStatusUpdates =
+  const statusOverview = useQuery(
+    api.status.listActive,
+    isAuthenticated ? { now } : "skip",
+  );  const hasStatusUpdates =
     statusOverview?.others.some((bucket) => bucket.hasUnviewed) ?? false;
   const [selectedConversationId, setSelectedConversationId] =
     useState<Id<"conversations"> | null>(null);
@@ -98,7 +116,7 @@ export function ChatPage() {
 
   const searchResults = useQuery(
     api.users.search,
-    debouncedNewChatQuery.length > 0
+    isAuthenticated && debouncedNewChatQuery.length > 0
       ? { query: debouncedNewChatQuery }
       : "skip",
   );
@@ -235,7 +253,13 @@ export function ChatPage() {
     }
   };
 
-  if (currentUser === undefined || conversations === undefined) {
+  if (
+    isAuthLoading ||
+    !isAuthenticated ||
+    currentUser === undefined ||
+    currentUser === null ||
+    conversations === undefined
+  ) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[var(--background)] text-foreground">
         <Loader2 className="size-8 animate-spin text-[#00A884]" />
@@ -348,7 +372,7 @@ export function ChatPage() {
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       variant="destructive"
-                      onClick={() => void signOut({ redirectUrl: "/" })}
+                      onClick={() => void signOut({ redirectUrl: SIGN_IN_PATH })}
                     >
                       <LogOut />
                       Log out

@@ -2,11 +2,12 @@
 
 import { api } from "@/convex/_generated/api";
 import { useClerk } from "@clerk/nextjs";
-import { useQuery } from "convex/react";
+import { useConvexAuth, useQuery } from "convex/react";
 import { Ban } from "lucide-react";
 
 export function BannedGate({ children }: { children: React.ReactNode }) {
-  const me = useQuery(api.users.viewer);
+  const { isAuthenticated } = useConvexAuth();
+  const me = useQuery(api.users.viewer, isAuthenticated ? {} : "skip");
   const { signOut } = useClerk();
 
   if (me?.isBanned === true) {
@@ -27,7 +28,7 @@ export function BannedGate({ children }: { children: React.ReactNode }) {
           </p>
         </div>
         <button
-          onClick={() => void signOut({ redirectUrl: "/" })}
+          onClick={() => void signOut({ redirectUrl: "/sign-in" })}
           className="rounded-lg bg-muted px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted/70"
         >
           Sign out

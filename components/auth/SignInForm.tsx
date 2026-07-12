@@ -5,6 +5,7 @@ import { GoogleButton } from "@/components/auth/GoogleButton";
 import {
   AFTER_AUTH_PATH,
   SSO_CALLBACK_PATH,
+  absoluteUrl,
   fieldErrorMessage,
   globalErrorMessage,
   navigateAfterAuth,
@@ -53,13 +54,15 @@ export function SignInForm() {
 
   const handleGoogle = async () => {
     setFormError(undefined);
+    const callbackUrl = absoluteUrl(SSO_CALLBACK_PATH);
     const { error } = await signIn.sso({
       strategy: "oauth_google",
-      redirectUrl: AFTER_AUTH_PATH,
-      redirectCallbackUrl: SSO_CALLBACK_PATH,
+      // Always return through the callback so the session is finalized.
+      redirectUrl: callbackUrl,
+      redirectCallbackUrl: callbackUrl,
     });
     if (error) {
-      setFormError(error.message);
+      setFormError(error.longMessage ?? error.message);
     }
   };
 

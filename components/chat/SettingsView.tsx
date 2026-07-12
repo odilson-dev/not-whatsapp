@@ -1,5 +1,6 @@
 "use client";
 
+import { SIGN_IN_PATH } from "@/components/auth/auth-utils";
 import { ThemeSegmentedControl } from "@/components/ThemeToggle";
 import { UserAvatar } from "@/components/chat/UserAvatar";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -92,7 +93,7 @@ export function SettingsView({ currentUser }: { currentUser: SettingsUser }) {
         <div className="mt-6 px-5">
           <button
             type="button"
-            onClick={() => void signOut({ redirectUrl: "/" })}
+            onClick={() => void signOut({ redirectUrl: SIGN_IN_PATH })}
             className="flex w-full items-center gap-3 rounded-xl bg-destructive/10 px-4 py-3 font-medium text-destructive transition-colors hover:bg-destructive/20"
           >
             <LogOut className="size-5" />

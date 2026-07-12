@@ -105,9 +105,19 @@ export const viewer = query({
 
 export const me = query({
   args: {},
-  returns: userValidator,
+  returns: v.union(userValidator, v.null()),
   handler: async (ctx) => {
-    return await getCurrentUser(ctx);
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return null;
+    }
+
+    return await ctx.db
+      .query("users")
+      .withIndex("by_tokenIdentifier", (q) =>
+        q.eq("tokenIdentifier", identity.tokenIdentifier),
+      )
+      .unique();
   },
 });
 
