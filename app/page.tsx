@@ -71,12 +71,12 @@ export default function Home() {
             </h1>
 
             <p className="landing-fade-up landing-delay-2 text-xl font-medium text-white/95 sm:text-2xl">
-              Come say hi.
+              Come say hi👋🏽
             </p>
 
             <p className="landing-fade-up landing-delay-3 mx-auto max-w-md text-base text-white/80 sm:text-lg lg:mx-0">
               It&apos;s like WhatsApp, but it&apos;s not... You know what we
-              mean 😉 A friendly, simple place to chat.
+              mean. A friendly, simple place to chat.
             </p>
 
             <div className="landing-fade-up landing-delay-4 flex flex-col items-center justify-center gap-3 pt-1 sm:flex-row lg:justify-start">
