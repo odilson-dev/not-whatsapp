@@ -18,13 +18,22 @@ const robotoMono = Roboto_Mono({
   subsets: ["latin"],
 });
 
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ??
+  (process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : "http://localhost:3000");
+
+const siteDescription =
+  "It's like WhatsApp, but it's not. A friendly, simple place to chat — real-time messaging with Next.js, Convex, and Clerk.";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: {
     default: "Not WhatsApp",
     template: "%s | Not WhatsApp",
   },
-  description:
-    "Real-time messaging app built with Next.js, Convex, and Clerk. Direct & group chats, statuses, read receipts, and admin moderation.",
+  description: siteDescription,
   keywords: [
     "chat",
     "messaging",
@@ -35,11 +44,16 @@ export const metadata: Metadata = {
     "portfolio",
   ],
   openGraph: {
-    title: "Not WhatsApp",
-    description:
-      "Real-time messaging app — like WhatsApp, but it's not. Built with Next.js, Convex, and Clerk.",
+    title: "Not WhatsApp — Come say hi",
+    description: siteDescription,
     type: "website",
     siteName: "Not WhatsApp",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Not WhatsApp — Come say hi",
+    description: siteDescription,
   },
 };
 
