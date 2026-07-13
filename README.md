@@ -4,9 +4,7 @@ A real-time messaging app inspired by WhatsApp — direct and group chats, statu
 
 > **Live demo:** Add your deployed URL here after following [Deployment](#deployment).
 
-![Chat list](docs/screenshots/chat-list.svg)
-![Group chat](docs/screenshots/group-chat.svg)
-![Admin dashboard](docs/screenshots/admin.svg)
+![Home page](app/opengraph-image.jpg)
 
 ## What I built
 
@@ -20,12 +18,12 @@ A real-time messaging app inspired by WhatsApp — direct and group chats, statu
 
 ## Tech stack
 
-| Layer | Technology |
-|-------|------------|
-| Frontend | Next.js 16 (App Router), React 19, Tailwind CSS |
-| Backend | [Convex](https://convex.dev) — real-time database & server functions |
-| Auth | [Clerk](https://clerk.com) |
-| UI | shadcn/ui, Lucide icons, Fancybox |
+| Layer    | Technology                                                           |
+| -------- | -------------------------------------------------------------------- |
+| Frontend | Next.js 16 (App Router), React 19, Tailwind CSS                      |
+| Backend  | [Convex](https://convex.dev) — real-time database & server functions |
+| Auth     | [Clerk](https://clerk.com)                                           |
+| UI       | shadcn/ui, Lucide icons, Fancybox                                    |
 
 ## Architecture
 
